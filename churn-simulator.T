@@ -255,9 +255,11 @@ void init(struct node *n){
 	idlist.insert(id);
 	idlist_alive.insert(id);
 	#endif
+	// succ list
 	for(int i=0;i<2*m;i++){
 		(*n).fingerid[i]=n->id;
 	}
+	// finger table nodes
 	for(int i=2*m;i<3*m;i++){
 		(*n).fingerid[i]=((*n).id+(unsigned int)pow(2,i-2*m))%MAXID;
 	}
@@ -266,8 +268,8 @@ void init(struct node *n){
 	n->alive=1;
 	#endif
 
-	n->succ1.next=2*m;
-	n->succ2.next=2*m;
+	n->succ1.next=2*m; // shadows
+	n->succ2.next=2*m; // shadows
 	char hostname[1024];
 	if(gethostname(hostname,1024)==0){
 		n->hostname=hostname;
@@ -339,7 +341,7 @@ void state_init_oracle(struct node *n){
 			n->hostnametable[i]=n->hostname;
 		}
 		struct msg message;
-		message.from=n->id;
+		message.from=n->id; 
 		message.original_from=n->id;
 		message.hostname_original_from=n->hostname;
 		message.ttl=0;
@@ -947,14 +949,14 @@ void node::stabilize(){	// key function to handle churn
 	struct msg message;
 	message.from=me;
 	message.to=this->fingertable[0];
-	//warn << "My successor is " << this->hostnametable[0];
+	warn << "My successor is " << this->hostnametable[0];
 	//Event evt2(Event::get_pred,Clock+latency[map[me]][map[message.to]],message.to,message);
 	//FutureEventList.push(evt2);
 	serialize_send(get_pred_msg,this->hostnametable[0],message);
 
-	delaycb(stabilize_timer,0,wrap(this,&node::stabilize));
+	delaycb(stabilize_timer,0,wrap(this,&node::stabilize)); // schedules functions after some time
 }
-
+// ************
 void node::get_pred(struct msg recv_message){
 	unsigned int me=this->id;
 	//assert(me==evt.get_id());
