@@ -1,0 +1,8 @@
+fingertable vs fingerid
+why have two succ lists?
+line 363. do we ever get here?
+what does notify() do? What is the purpose? It does not seem to be doing anything right now.
+what does node_alive do?
+what does sign_state do?
+extend_path not used?
+what does initiate_path do?
