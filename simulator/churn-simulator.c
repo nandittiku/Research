@@ -6,11 +6,14 @@
 #include<set>
 #include<list>
 #include<math.h>
+#include <limits.h>
 #include<queue>
 #include<stack>
-#include<hash_map.h>
-
+#include <ext/hash_map>
+using namespace __gnu_cxx;
 using namespace std;
+
+#define DEBUG 1
 
 //int MAXID = 1048576;
 //const int m=20;	// log MAXID /log 2
@@ -39,7 +42,7 @@ const int TIMEOUT=2;	// 1 second timeout...is this OK?
 double Clock;
 
 struct msg{
-  unsigned int from; //
+  unsigned int from; 
   unsigned int to;
   unsigned int value;
   unsigned int value2;
@@ -50,7 +53,7 @@ struct msg{
   stack<unsigned int> path;	// lookup stack
   set<unsigned int> failed_nodes;	// failed nodes that are encountered
   unsigned int fingertable_succ1[3*m];
-  unsigned int fingertable_succ2[3*m];
+  unsigned int fingertable_succ2[3*m]; // why have two succ lists?
 
 };
 
@@ -69,12 +72,12 @@ class Event{
  Event(EvtType type, double etime, int id, struct msg message):_type(type),_etime(etime),_id(id),_message(message){}
   EvtType get_type(){return _type;}
   double get_time(){return _etime;}
-  int get_id(){return _id;}
+  unsigned int get_id(){return _id;}
   struct msg get_message(){return _message;}
  protected:
   EvtType _type;
   double _etime;
-  int _id;
+  unsigned int _id;
   struct msg _message;
 };
 
@@ -82,6 +85,7 @@ priority_queue<Event> FutureEventList;
 
 struct shadow{
   unsigned int id;
+  // whats the difference between fingertable and fingerid?
   unsigned int fingertable[3*m];	// the first 2m is the succ list and then comes the actual fingertable
   unsigned int fingerid[3*m];
   unsigned int fingertable_succ1[3*m]; // succ1 of fingertable[i]
@@ -148,6 +152,7 @@ void sign_state(Event evt, struct node *n);
 void recv_sign(Event evt, struct node *n);
 void initiate_path(Event evt, struct node *n);
 void extend_path(Event evt, struct node *n);
+void debug(const char* msg);
 
 double prob_unreliability[7];
 double path_count=0;
@@ -188,7 +193,6 @@ int main(int argc, char *argv[]){
 
   // lets initialize node state and the event queue 
   for(int i=0;i<num_nodes;i++){
-		
     init(&allnodes[i]);
     map[allnodes[i].id]=i;
   }
@@ -198,7 +202,10 @@ int main(int argc, char *argv[]){
     assert(allnodes[i].alive==true);
   }
 	
+
+  // Perform the actions in the events queue
   while(!FutureEventList.empty() && Clock < simulation_time ){
+
     Event evt=FutureEventList.top();
     FutureEventList.pop();
     Clock=evt.get_time();
@@ -248,48 +255,37 @@ int main(int argc, char *argv[]){
 			
     }
     else if(evt.get_type()==Event::lookup){
-      //	printf("Handling Event request_cs\n");
       lookup(evt,n);
-      //	cout << "lookup " << endl;
     }
     else if(evt.get_type()==Event::lookup_reply){
       lookup_reply(evt,n);
-      //	cout << "lookup_reply " << endl;
     }
     else if(evt.get_type()==Event::ping){
       ping(evt,n);
-      //	cout << "ping " << endl;
     }
     else if(evt.get_type()==Event::ping_reply){
       ping_reply(evt,n);
-      //	cout << "ping_reply " << endl;
     }
     else if(evt.get_type()==Event::stabilize){
       stabilize(evt,n);
-      //	cout << "stabilize " << endl;
     }
     else if(evt.get_type()==Event::get_pred){
       get_pred(evt,n);
-      //	cout << "get_pred " << endl;
     }
     else if(evt.get_type()==Event::stabilize_reply){
       stabilize_reply(evt,n);
-      //	cout << "stabilize_reply " << endl;
     }
     else if(evt.get_type()==Event::stabilize_timeout){
       stabilize_timeout(evt,n);
     }		
     else if(evt.get_type()==Event::fix_fingers){
       fix_fingers(evt,n);
-      //	cout << "fix_fingers" << endl;
     }
     else if(evt.get_type()==Event::notify){
       notify(evt,n);
-      //	cout << "notify" << endl;
     }
     else if(evt.get_type()==Event::check_predecessor){
       check_predecessor(evt,n);
-      //	cout << "check_predecessor " << endl;
     }
     else if(evt.get_type()==Event::ping_timeout){
       ping_timeout(evt,n);
@@ -314,7 +310,7 @@ int main(int argc, char *argv[]){
   for(int i=0;i<7;i++){
     cout << prob_unreliability[i]/path_count << " ";
   }
-  cout << endl;
+  cout << endl; 
   exit(1);
 	
   // at the end of everything, lets check if most lookups succeed
@@ -365,49 +361,11 @@ int main(int argc, char *argv[]){
 	   << correct_count8/(double)m<< " " << correct_count10/(double)m <<  " " << correct_count12/(double)m << endl;
       k++;
 
-      /*if(correct_count6!=m){
-	for(int j=2*m;j<3*m;j++){
-	cout << allnodes[i].fingerid[j] << " ";
-	}
-	cout << endl;
-	for(int j=2*m;j<3*m;j++){
-	cout << succ_alive(allnodes[i].fingerid[j]) << " ";
-	}
-	cout << endl;
-	for(int j=2*m;j<3*m;j++){
-	cout << allnodes[i].fingertable[j] << " ";
-	}
-	cout << endl << endl;
-
-	for(int j=2*m;j<3*m;j++){
-	cout << allnodes[i].succ1.fingerid[j] << " ";
-	}
-	cout << endl;
-				
-				
-	for(int j=2*m;j<3*m;j++){
-	cout << succ_alive(allnodes[i].succ1.fingerid[j]) << " ";
-	}
-	cout << endl;
-
-				
-	for(int j=2*m;j<3*m;j++){
-	cout << allnodes[i].succ1.fingertable[j] << " ";
-	}
-	cout << endl;
-				
-	for(int j=2*m;j<3*m;j++){
-	cout << allnodes[map[allnodes[i].fingertable[0]]].fingertable[j] << " ";
-	}
-	cout << endl;
-				
-	exit(1);
-	}*/
     }
   }
   cout << "Number of nodes alive = " << idlist_alive.size() << endl;
   exit(1);
-
+  // do we ever get here?
   while(!FutureEventList.empty()){
     FutureEventList.pop();
   }
@@ -434,13 +392,10 @@ int main(int argc, char *argv[]){
     n=&allnodes[map[evt.get_id()]];
     assert(evt.get_id()==n->id);
     if(evt.get_type()==Event::lookup){
-      //	printf("Handling Event request_cs\n");
       lookup(evt,n);
-      //	cout << "lookup " << endl;
     }
     else if(evt.get_type()==Event::lookup_reply){
       lookup_reply(evt,n);
-      //	cout << "lookup_reply " << endl;
     }
   }
 
@@ -452,6 +407,9 @@ int main(int argc, char *argv[]){
   return 0;
 }
 
+/**
+ * assign id to the node and set up the nodes initial vars
+ */
 void init(struct node *n){
   Clock=0;
 
@@ -480,6 +438,9 @@ void init(struct node *n){
   n->succ2.next=2*m;
 }
 
+/**
+ * Set up the succ and succ1 lists for a node. Maintains shadow node information
+ */
 void state_init_oracle(struct node *n){
   n->fingertable[0]=succ(n->id+1);	// note that the fingertable is not strictly increasing. There is a sharp cut at 2m
   for(int i=1;i<2*m;i++){
@@ -541,13 +502,11 @@ void state_init_oracle(struct node *n){
 
 }
 
+/**
+ *  Obtain the node closest to the given id in the network using Chord? Used to find the succ to a given node
+ */
 unsigned int succ(unsigned int id){		
   set<unsigned int>::iterator iter;
-  /*for(iter=idlist.begin();iter!=idlist.end();iter++){
-    if(*iter >= id){		// should this be >=
-    return *iter;
-    }
-    }*/
   iter=idlist.lower_bound(id);
   if(iter!=idlist.end()){
     return *iter;
@@ -568,7 +527,9 @@ unsigned int succ_alive(unsigned int id){
   }
 }
 
-
+/**
+ * Looking for a particular node or node closest to nodeId from the message in the evt. We use the Chord set up to look up a node.
+ */
 void lookup(Event evt, struct node *n){		// lookup will be recursive and will take time
   // the result of the lookup should be to schedule another lookup if you dont have the answer
   // if you have the answer, then directly send answer message to the initiator
@@ -589,8 +550,8 @@ void lookup(Event evt, struct node *n){		// lookup will be recursive and will ta
     return;	// just drop the packet
   }
 	
+  // if looking for myself, i can just set up a lookup reply with my data.
   if(message.value==me){
-    // return me
     message.to=message.from;
     message.from=me;
     message.value2=me;
@@ -598,14 +559,11 @@ void lookup(Event evt, struct node *n){		// lookup will be recursive and will ta
     message.value4=n->fingertable[1];
     Event evt2(Event::lookup_reply,Clock+1,message.to,message);
     FutureEventList.push(evt2);
-    //assert(message.value2==succ(message.value));
     return;
 
   }
+  // else find id closest to the id you are looking for in my fingertable data.
   if(simCanon_NodeId_Closer(me,message.value,n->fingertable[0])==message.value){
-	
-    //assert(n->fingertable[0]==succ(message.value));
-		
     message.to=message.from;
     message.from=me;
     message.value2=n->fingertable[0];
@@ -613,7 +571,6 @@ void lookup(Event evt, struct node *n){		// lookup will be recursive and will ta
     message.value4=n->fingertable[2];
     Event evt2(Event::lookup_reply,Clock+1,message.to,message);
     FutureEventList.push(evt2);
-    //assert(message.value2==succ(message.value));
     return;
   }
   unsigned int next_hop=me;
@@ -623,8 +580,7 @@ void lookup(Event evt, struct node *n){		// lookup will be recursive and will ta
       next_hop=n->fingertable[i];
     }
   }
-
-  //assert(next_hop!=me); 	==> all precedding hops have failed
+  // could not find it in my fingertable, so lets propogate the lookup to the next hop in my Chord lookup protocol
   if(next_hop!=me){
     message.to=next_hop;
     Event evt2(Event::lookup,Clock+1,message.to,message);
@@ -649,26 +605,10 @@ void lookup_reply(Event evt, struct node *n){
   num_ttl=num_ttl+message.ttl;
   for(int i=2*m;i<3*m;i++){
     if(n->fingerid[i]==message.value){
-      //assert(message.value2==succ(message.value));
-      //assert(message.value2==n->fingertable[i]);	// remove this assertion when handling churn
       n->fingertable[i]=message.value2;
       n->fingertable_succ1[i]=message.value3;
       n->fingertable_succ2[i]=message.value4;
-      //cout << message.value2 << " " << message.value3 << " " << message.value4 << endl;
-      //break;	//this should fix things
     }
-    /*	if(n->succ1.fingerid[i]==message.value){
-	n->succ1.fingertable[i]=message.value2;
-	n->succ1.fingertable_succ1[i]=message.value3;
-	n->succ1.fingertable_succ2[i]=message.value4;
-	}
-
-	if(n->succ2.fingerid[i]==message.value){
-	n->succ2.fingertable[i]=message.value2;
-	n->succ2.fingertable_succ1[i]=message.value3;
-	n->succ2.fingertable_succ2[i]=message.value4;
-
-	}*/
   }
 }
 
@@ -790,13 +730,14 @@ void fix_fingers(Event evt, struct node *n){	// periodically refresh fingers
   Event evt5(Event::fix_fingers,Clock+fix_fingers_timer,message5.to,message5);	// earlier process should be over after 1000 time
   FutureEventList.push(evt5);
 }
-
+// what are we doing here? We do not seem to be doing anything important.
 void  ping_reply(Event evt, struct node *n){
   unsigned int me=n->id;
   assert(me==evt.get_id());
   struct msg message=evt.get_message();
   //assert(n->pred==message.from);
 }
+// if a pred is dead, don't we want to lookup our new pred? 
 void ping_timeout(Event evt, struct node *n){
   unsigned int me=n->id;
   assert(me==evt.get_id());
@@ -839,6 +780,7 @@ void check_predecessor(Event evt, struct node *n){	// checks if the predecessor 
   // if receive ping reply, nullify timeout event
 }
 
+// event created by stabilize_reply
 void notify(Event evt, struct node *n){	// i guess this is the action taken when the predecessor has failed
   // if predecessor is nil, or n' lies between predecessor,n
   // predecessor=n'
@@ -863,15 +805,19 @@ void stabilize(Event evt, struct node *n){	// key function to handle churn
   struct msg message;
   message.from=me;
   message.to=n->fingertable[0];
-  Event evt2(Event::get_pred,Clock+1,message.to,message);
+  Event evt2(Event::get_pred,Clock+1,message.to,message); // call get_pred on my immediate succ to stabilize
   FutureEventList.push(evt2);
 
+  // call stabilize after intervals
   message.from=me;
   message.to=me;
   Event evt3(Event::stabilize,Clock+stabilize_timer,message.to,message);
   FutureEventList.push(evt3);
 }
 
+/**
+ * get my pred node and verify that the calling node is my pred. else there are 1 or more nodes in between me and the callee node
+ */
 void get_pred(Event evt, struct node *n){
   unsigned int me=n->id;
   assert(me==evt.get_id());
@@ -886,14 +832,16 @@ void get_pred(Event evt, struct node *n){
   FutureEventList.push(evt2);	
 }
 
+/**
+ * What are we doing here?
+ */
 void stabilize_reply(Event evt, struct node *n){
   unsigned int me=n->id;
   assert(me==evt.get_id());
   struct msg message=evt.get_message();
   unsigned int x=message.value;
-  /*if x lies between n,n's succ
-    n->fingertable[0]=x;*/
-  //assert(x==me);	// take this u=out for churn
+  // after making the stabilize request, the get_pred call replied with a node different from your own.
+  // there is now a new node(s) between me and my pred. Update my fingertable accordingly
   if(x!=me && simCanon_NodeId_Closer(me,x,n->fingertable[0])==x){
     n->fingertable[0]=x;
     n->fingertable[1]=message.from;
@@ -908,7 +856,7 @@ void stabilize_reply(Event evt, struct node *n){
   }
   message.from=me;
   message.to=n->fingertable[0];
-  Event evt2(Event::notify,Clock+1,message.to,message);
+  Event evt2(Event::notify,Clock+1,message.to,message); // not really sure what this is for. Notify does not do anything.
   FutureEventList.push(evt2);
 
 
@@ -964,6 +912,9 @@ void stabilize_reply(Event evt, struct node *n){
 	
 }
 
+/**
+ * if call to stabilize timed out. most probably becuase the pred died.
+ */
 void stabilize_timeout(Event evt, struct node *n){
   unsigned int me=n->id;
   assert(me==evt.get_id());
@@ -991,6 +942,9 @@ unsigned int simCanon_NodeId_IncreasingDistance(unsigned int idsrc, unsigned int
   }
 }
 
+/**
+ * find nodeId closest to given id
+ */
 unsigned int simCanon_NodeId_Closer(unsigned int idsrc1, unsigned int idsrc2, unsigned int iddest) {
 
   if (simCanon_NodeId_IncreasingDistance(idsrc1,iddest)<simCanon_NodeId_IncreasingDistance(idsrc2,iddest))
@@ -999,6 +953,9 @@ unsigned int simCanon_NodeId_Closer(unsigned int idsrc1, unsigned int idsrc2, un
     return idsrc2;
 }
 
+/**
+ * set a node as dead if we get a node_dead message/event
+ */
 void node_dead(Event evt, struct node *n){
   unsigned int me=evt.get_id();
   assert(n->id==me);
@@ -1012,6 +969,9 @@ void node_dead(Event evt, struct node *n){
   FutureEventList.push(evt2);
 }
 
+/**
+ * event created by node_dead from me to me
+ */
 void node_alive(Event evt, struct node *n){
   unsigned int me=evt.get_id();
   n->alive=1;
@@ -1126,6 +1086,10 @@ void recv_sign(Event evt, struct node *n){
   }
 }
 
+/**
+ * use the Map to create a path between two nodes?
+ * we dont look at Event here?
+ */
 void initiate_path(Event evt, struct node *n){
   path_count++;	
 
@@ -1162,7 +1126,7 @@ void initiate_path(Event evt, struct node *n){
 }
 
 void extend_path(Event evt, struct node *n){
-
+  
 }
 
 
@@ -1175,3 +1139,10 @@ double exponential_stream(double mean){
 }
 
 
+void debug(const char* s)
+{
+  if(DEBUG)
+    {
+      printf ("%s\n",s);
+    }
+}
