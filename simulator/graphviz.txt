@@ -1,0 +1,68 @@
+main -> init
+main -> state_init_oracle
+main -> ping_timeout
+main -> stabilize_timeout
+main -> lookup
+main -> lookup_reply
+main -> ping
+main -> ping_reply
+main -> stabilize
+main -> get_pred
+main -> stabilize_reply
+main -> fix_fingers
+main -> notify
+main -> check_predecessor
+main -> node_dead
+main -> sign_state
+main -> recv_sign
+main -> initiate_path
+main -> extend_path
+
+
+state_init_oracle -> sign_state
+state_init_oracle -> check_predecessor
+state_init_oracle -> stabilize
+state_init_oracle -> fix_fingers
+state_init_oracle -> node_dead
+state_init_oracle -> initiate_path
+
+
+lookup -> lookup_reply
+lookup -> lookup
+
+fix_fingers -> lookup
+fix_fingers -> simCanon_NodeId_Closer
+fix_fingers -> fix_fingers
+
+ping -> ping_reply
+
+check_predecessor -> ping
+check_predecessor -> check_predecessor
+
+notify -> simCanon_NodeId_Closer
+
+stabilize -> get_pred
+stabilize -> stabilize
+
+get_pred -> stabilize_reply
+
+stabilize_reply -> simCanon_NodeId_Closer
+stabilize_reply -> notify
+
+stabilize_timeout -> get_pred
+
+simCanon_NodeId_Closer -> simCanon_NodeId_IncreasingDistance
+
+node_dead -> node_alive
+
+node_alive -> sign_state
+node_alive -> check_predecessor
+node_alive -> stabilize
+node_alive -> fix_fingers
+node_alive -> node_dead
+node_alive -> initiate_path
+
+sign_state -> recv_sign
+sign_state -> sign_state
+
+
