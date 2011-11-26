@@ -1,4 +1,4 @@
 all:
-	g++ -g -Wall  churn-simulator.c -o sim -Wno-deprecated 
+	g++ -g -Wall  churn-simulator.c -o sim 
 clean:  
 	rm -f sim
