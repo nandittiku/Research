@@ -9,6 +9,7 @@
 #include <limits.h>
 #include<queue>
 #include<stack>
+#include <algorithm>
 /* #include <ext/hash_map> */
 #include <set>
 #include<tr1/unordered_map>
@@ -131,14 +132,14 @@ struct node{
 
 
   // needed for stabilization of DHT
-  unsigned int possibleSuccessorsCount;
-  unsigned int possibleSuccessors[2*m]; // let these store the nodeid
-  unsigned int possibleSuccessorsIP[2*m]; // let these store the ip
-  int possibleSuccessorsStatus[2*m];
+  vector<unsigned int> possibleSuccessors; // let these store the nodeid
+  unordered_map<unsigned int, unsigned int> possibleSuccessorsIP; // let these store the ip
+  unordered_map<unsigned int, int> possibleSuccessorsStatus;
 };
 
 
 struct node *allnodes;
+unsigned int *allnodesIds;
 
 int num_nodes,check_predecessor_timer, stabilize_timer,fix_fingers_timer, guard_timer, simulation_time,mean_alive, sign_timer, path_timer;
 double mean_alive_rate;
@@ -185,7 +186,8 @@ void getSuccAndPredReply (Event evt, struct node *n);
 int compare (const void * a, const void * b);
 void stabilizeSuccessorListAuthenticate (Event evt, struct node *n);
 unsigned int pred(unsigned int id);
-
+void verifySuccessorListCorrectness();
+void verifySuccessorListCorrectness(struct node* n, int pos);
 
 double prob_unreliability[7];
 double path_count=0;
@@ -223,11 +225,13 @@ int main(int argc, char *argv[]){
 	
 
   allnodes = new struct node[num_nodes];
+  allnodesIds = new unsigned int[num_nodes];
 
   // lets initialize node state and the event queue 
   for(int i=0;i<num_nodes;i++){
     init(&allnodes[i]);
     map[allnodes[i].id]=i;
+    allnodesIds[i] = allnodes[i].id;
   }
 
   for(int i=0;i<num_nodes;i++){
@@ -241,13 +245,11 @@ int main(int argc, char *argv[]){
     FutureEventList.pop();
     Clock=evt.get_time();
     struct node * n;
+
     n=&allnodes[map[evt.get_id()]];
-    if(map[evt.get_id()]==29)
-      {
-	struct node * nd = &allnodes[29];
-	/* printf("%d %d\n", nd->id, evt.get_type()); */
-      }
-    /* printf("%d %d %d %d\n", evt.get_id(), n->id, evt.get_type(), map[evt.get_id()]); */
+
+    if(evt.get_id() != n->id)
+      printf("%d %d %d %d\n", evt.get_id(), n->id, evt.get_type(), map[evt.get_id()]);
     assert(evt.get_id()==n->id);
     if(n->alive==0){
       // the node is dead
@@ -263,15 +265,14 @@ int main(int argc, char *argv[]){
       }
       else if(evt.get_type()==Event::node_alive){
 	node_alive(evt,n);
-				
       }
       else if(evt.get_type()==Event::get_pred){ // this should make stabilization fault tolerant
 	// stabilize_timeout
-	struct msg message=evt.get_message();
-	message.to=message.from;
-	message.from=n->id;
-	Event evt2(Event::stabilize_timeout, Clock+TIMEOUT,message.to,message);
-	FutureEventList.push(evt2);
+	/* struct msg message=evt.get_message(); */
+	/* message.to=message.from; */
+	/* message.from=n->id; */
+	/* Event evt2(Event::stabilize_timeout, Clock+TIMEOUT,message.to,message); */
+	/* FutureEventList.push(evt2); */
       }
       else if(evt.get_type()==Event::lookup){	// this should make lookups fault tolerant
       	// lookup_timeout ..but what if the destination of lookup_timeout is also dead..do we need to store the entire
@@ -289,7 +290,6 @@ int main(int argc, char *argv[]){
 		
       	// ask prev node to do a lookup, while avoiding the failed nodes
       }
-			
     }
     else if(evt.get_type()==Event::lookup){
       lookup(evt,n);
@@ -304,7 +304,7 @@ int main(int argc, char *argv[]){
       ping_reply(evt,n);
     }
     else if(evt.get_type()==Event::stabilize){
-      stabilize(evt,n);
+      //      stabilize(evt,n);
     }
     else if(evt.get_type()==Event::get_pred){
       get_pred(evt,n);
@@ -369,6 +369,9 @@ int main(int argc, char *argv[]){
     cout << prob_unreliability[i]/path_count << " ";
   }
   cout << endl; 
+
+  verifySuccessorListCorrectness();
+
   exit(1);
 	
   // at the end of everything, lets check if most lookups succeed
@@ -476,7 +479,7 @@ void init(struct node *n){
   }
   path_count=0;
 
-  unsigned int id=rand()%MAXID;
+  unsigned int id=rand()%MAXID; // in the real implementation use hash of the ip address
   while(idlist.find(id)!=idlist.end()){
     id=rand()%MAXID;
   }
@@ -504,7 +507,7 @@ void init(struct node *n){
 void state_init_oracle(struct node *n){
   n->fingertable[0]=succ(n->id+1);	// note that the fingertable is not strictly increasing. There is a sharp cut at 2m
   n->predList[0]=pred(n->id);
-    
+
   for(int i=1;i<2*m;i++){
     n->fingertable[i]=succ(n->fingertable[i-1]+1);
     n->predList[i]=pred(n->predList[i-1]);
@@ -555,11 +558,11 @@ void state_init_oracle(struct node *n){
   /* Event evt2(Event::stabilize,Clock+stabilize_timer,message.to,message); */
   /* FutureEventList.push(evt2); */
 
-  Event evt2(Event::stabilizeSuccessorList,Clock+stabilize_timer,message.to,message);
+  Event evt2(Event::stabilizeSuccessorListRequest,Clock+stabilize_timer,message.to,message);
   FutureEventList.push(evt2);
 	
-  Event evt3(Event::fix_fingers,Clock+fix_fingers_timer,message.to,message);
-  FutureEventList.push(evt3);
+  /* Event evt3(Event::fix_fingers,Clock+fix_fingers_timer,message.to,message); */
+  /* FutureEventList.push(evt3); */
 
   Event evt4(Event::node_dead,Clock+guard_timer+exponential_stream(mean_alive_rate),message.to,message);
   FutureEventList.push(evt4);
@@ -728,6 +731,7 @@ void fix_fingers(Event evt, struct node *n){	// periodically refresh fingers
       }
     }
   }
+
   struct msg message;
   message.from=me;
   message.to=n->fingertable[n->next];			// use the lookup function already coded
@@ -884,6 +888,7 @@ void notify(Event evt, struct node *n){	// i guess this is the action taken when
 
 // called periodically
 void stabilize(Event evt, struct node *n){	// key function to handle churn
+  printf("CALLED STABILIZE!! SHOULD NOT HAPPEN ++++++++++++++++++++++++\n");
   unsigned int me=n->id;
   assert(me==evt.get_id());
   struct msg message;
@@ -895,8 +900,8 @@ void stabilize(Event evt, struct node *n){	// key function to handle churn
   // call stabilize after intervals
   message.from=me;
   message.to=me;
-  Event evt3(Event::stabilize,Clock+stabilize_timer,message.to,message);
-  FutureEventList.push(evt3);
+  /* Event evt3(Event::stabilize,Clock+stabilize_timer,message.to,message); */
+  /* FutureEventList.push(evt3); */
 }
 
 /**
@@ -1107,8 +1112,8 @@ void node_alive(Event evt, struct node *n){
   Event evt1(Event::check_predecessor,Clock+check_predecessor_timer,message.to,message);
   FutureEventList.push(evt1);
 
-  Event evt2(Event::stabilize,Clock+stabilize_timer,message.to,message);
-  FutureEventList.push(evt2);
+  /* Event evt2(Event::stabilize,Clock+stabilize_timer,message.to,message); */
+  /* FutureEventList.push(evt2); */
 	
   Event evt3(Event::fix_fingers,Clock+fix_fingers_timer,message.to,message);
   FutureEventList.push(evt3);
@@ -1237,22 +1242,33 @@ void debug(const char* s)
 /**************************
  * Start of Nandit's code *
  **************************/
+
+unsigned int verifyNode = 124;
+
 /* Send stabilize request to nodes */
 void stabilizeSuccessorListRequest(Event evt, struct node *n)
 {
+  return;
   unsigned int me=n->id;
   assert(me==evt.get_id());
   /* debug("stabilizeSuccessorListRequest"); */
-  n->possibleSuccessorsCount = 0; // reset possibleSuccessors
+  n->possibleSuccessors.clear(); // reset possibleSuccessors
   // Obtain the successorList and predecessorList of first rDHT nodes in the
   // current successor list
-  for (int i = 0; i < 2; ++i)
+  if(n->id == verifyNode)
+    cout<<"sending messages from "<<n->id<<endl;
+  for (int i = 0; i < 1; ++i)
     {
+      n->possibleSuccessors.push_back(n->fingertable[i]);
       struct msg message;
       message.from = n->id;
       message.to = n->fingertable[i];
       Event evt2(Event::getSuccAndPredRequest,Clock+1,message.to,message);
       FutureEventList.push(evt2);
+      if(n->id == verifyNode)
+	{
+	  cout<<"  "<<message.to<<endl;
+	}
     }
 
   // stabilize the list after ~20 seconds
@@ -1260,8 +1276,8 @@ void stabilizeSuccessorListRequest(Event evt, struct node *n)
   message.from = n->id;
   message.to = n->id;
 
-  /* Event evt2(Event::stabilizeSuccessorListAuthenticate,Clock+20,message.to,message); */
-  /* FutureEventList.push(evt2); */
+  Event evt2(Event::stabilizeSuccessorListAuthenticate,Clock+2,message.to,message);
+  FutureEventList.push(evt2);
 }
 
 void getSuccAndPredRequest (Event evt, struct node *n)
@@ -1271,20 +1287,13 @@ void getSuccAndPredRequest (Event evt, struct node *n)
   /* debug("getSuccAndPredRequest"); */
   struct msg message=evt.get_message();
   message.to=message.from;
-  message.from=me;
-  if(me == 3835 || me == 3327)
-    {
-      cout<<"===== get "<<n->id<<endl;
-    }
-      
+  message.from=me; // CHECK: make sure this is not garbage
+
   for(int i=0;i<2*m;i++){
     message.fingertable[i]=n->fingertable[i];	// here's my succ list
     message.predList[i]=n->predList[i];         // here's my pred list
-    if(me == 3835 || me == 3327)
-      {
-	printf("%d %d\n", message.fingertable[i], message.predList[i]);
-      }
   }
+
   Event evt2(Event::getSuccAndPredReply,Clock+1,message.to,message);
   FutureEventList.push(evt2);	
 }
@@ -1293,15 +1302,17 @@ void getSuccAndPredReply (Event evt, struct node *n)
 {
   unsigned int me=n->id;
   assert(me==evt.get_id());
+
   /* debug("getSuccAndPredReply"); */
   struct msg message=evt.get_message();
   // add content to possibleSuccessors
+
   for (unsigned int i=0; i < 2*m; ++i)
     {
-      n->possibleSuccessors[n->possibleSuccessorsCount] = message.fingertable[i];
-      n->possibleSuccessorsCount++;
-      n->possibleSuccessors[n->possibleSuccessorsCount] = message.predList[i];
-      n->possibleSuccessorsCount++;
+      n->possibleSuccessors.push_back( message.fingertable[i] );
+      n->possibleSuccessors.push_back( message.predList[i] );
+      assert(idlist.find(message.predList[i]) != idlist.end());
+      assert(idlist.find(message.fingertable[i]) != idlist.end());
     }
 }
 
@@ -1310,15 +1321,16 @@ void stabilizeSuccessorListAuthenticate (Event evt, struct node *n)
 {
   unsigned int me=n->id;
   assert(me==evt.get_id());
-  /* debug("stabilizeSuccessorListAuthenticate"); */
-  qsort(n->possibleSuccessors, n->possibleSuccessorsCount, sizeof(unsigned int), compare);
 
-  for (unsigned int i = 0; i < n->possibleSuccessorsCount; ++i)
+  sort (n->possibleSuccessors.begin(), n->possibleSuccessors.begin()); 
+
+  vector<unsigned int>::iterator it;
+  for ( it = n->possibleSuccessors.begin() ; it < n->possibleSuccessors.end(); it++ )
     {
-      if( n->possibleSuccessors[i] > n->id )
+      if( *it > n->id )
 	{
-	  n->possibleSuccessorsStatus[i] = WAITING;
-	  authenticate( n->id, n->possibleSuccessors[i], n->possibleSuccessorsIP[i] );
+	  n->possibleSuccessorsStatus[*it] = WAITING;
+	  authenticate( n->id, *it, *it );
 	}
     }
 
@@ -1326,8 +1338,8 @@ void stabilizeSuccessorListAuthenticate (Event evt, struct node *n)
   struct msg message;
   message.to=n->id;
   message.from=n->id;
-  Event evt2(Event::stabilizeSuccessorList,Clock+5,message.to,message);
-  FutureEventList.push(evt2);	
+  Event evt2(Event::stabilizeSuccessorList,Clock+10,message.to,message);
+  FutureEventList.push(evt2);
 }
 
 void stabilizeSuccessorList (Event evt, struct node *n)
@@ -1335,31 +1347,40 @@ void stabilizeSuccessorList (Event evt, struct node *n)
   /* debug("stabilizeSuccessorList"); */
   // now that you have information form all nodes lets stabilize this thing
   // 2*m is the number of nodes we want in our successor list
-  for (unsigned int i=0, count = 0; i < n->possibleSuccessorsCount && count<2*m; ++i)
+
+  for (unsigned int i=0, count = 0; i < n->possibleSuccessors.size() && count<2*m; ++i)
     {
-      if ( n->possibleSuccessorsStatus[i] == AUTHENTICATED )
+      if ( idlist.find(n->possibleSuccessors[i]) == idlist.end() )
 	{
-	  // insert into my new succ list
-	  n->fingertable[i] = n->possibleSuccessors[i];
-	  count++;
+	  cout<<" "<<n->possibleSuccessors[i]<<endl;
 	}
+      assert(idlist.find(n->possibleSuccessors[i]) != idlist.end());
+
+      if ( n->possibleSuccessorsStatus[i] == AUTHENTICATED )
+      	{
+      	  // insert into my new succ list
+      	  n->fingertable[i] = n->possibleSuccessors[i];
+      	  count++;
+      	}
     }
 
+  qsort(n->fingertable, 2*m, sizeof(unsigned int), compare);
 
   // create another stabilizeSuccessorListRequest after ~5 seconds
   struct msg message;
   message.to=n->id;
   message.from=n->id;
-  Event evt2(Event::stabilizeSuccessorListRequest,Clock+5,message.to,message);
-  FutureEventList.push(evt2);	
+  /* Event evt2(Event::stabilizeSuccessorListRequest,Clock+5,message.to,message); */
+  /* FutureEventList.push(evt2); */
 }
 
 void authenticate ( unsigned int from, unsigned int to, unsigned int toIP )
 {
-  debug("authenticate");
+  /* debug("authenticate"); */
   // confirm that nodes IP address maps to nodes id
   if ( to != hashIP(toIP) )
     {
+      cout<<to<<" != "<<hashIP(toIP);
       fprintf(stderr, "ERROR: THIS SHOULD NEVER HAPPEN. NODE->ID SHOULD BE SAME AS HASH FOR NOODE->IP");
       exit(0); // lets just crash here for now
     }
@@ -1371,13 +1392,13 @@ void authenticate ( unsigned int from, unsigned int to, unsigned int toIP )
   message.to = to;
   unsigned int seqNo = from + to; // for now just use this. later we can randmoize this.
   message.value = seqNo;
-  Event evt2(Event::authenticateRequest, Clock+TIMEOUT, message.to, message);
+  Event evt2(Event::authenticateRequest, Clock+1, message.to, message);
   FutureEventList.push(evt2);
 }
 
 void authenticateRequest (Event evt, struct node *n)
 {
-  debug("authenticateRequest");
+  /* debug("authenticateRequest"); */
   // reply back saying that I am alive and well.
   struct msg message = evt.get_message();
 
@@ -1393,7 +1414,7 @@ void authenticateRequest (Event evt, struct node *n)
 
 void authenticateReply (Event evt, struct node *n)
 {
-  debug("authenticateReply");
+  /* debug("authenticateReply"); */
   // verify that the seqNo is correct and then change status of node.
   struct msg message = evt.get_message();
   if ( message.value != n->id + message.from )
@@ -1404,7 +1425,6 @@ void authenticateReply (Event evt, struct node *n)
   
   // update status of node
   n->possibleSuccessorsStatus[map[message.from]] = AUTHENTICATED;
-
 }
 
 // for now lets just return the ipaddress since we do not have a proper hashing function yet
@@ -1417,4 +1437,40 @@ unsigned int hashIP(unsigned int ipaddress)
 int compare (const void * a, const void * b)
 {
   return ( *(int*)a - *(int*)b );
+}
+
+
+void verifySuccessorListCorrectness()
+{
+  qsort(allnodesIds, num_nodes, sizeof(unsigned int), compare);
+
+  cout<<"First node = "<<allnodesIds[0]<<"   Last node = "<<allnodesIds[num_nodes-1]<<endl;
+  for (int i = 0; i < num_nodes; ++i)
+    {
+      struct node *n;
+      n = &allnodes[map[allnodesIds[i]]];
+      // verifiy correctness of successor list of this node
+      verifySuccessorListCorrectness(n, i);
+    }
+
+}
+
+void verifySuccessorListCorrectness(struct node *n, int pos)
+{
+  // find location of node first
+  if(n->id == verifyNode)
+    cout<<"verifying node "<<n->id<<endl;
+  pos = (pos+1)%num_nodes;
+
+  for (int i = 0; i < 2*m; ++i)
+    {
+      if(n->id == verifyNode)
+	cout<<"  "<<allnodesIds[(pos+i)%num_nodes]<<" => "<<n->fingertable[i]<< endl;
+      /* if(n->fingertable[i] != allnodesIds[(pos+i)%num_nodes]) */
+      /* 	{ */
+      /* 	  printf("ERROR: FINGERTABLE FOR %d IS INCORRECT\n", n->id); */
+      /* 	  exit(0); */
+      /* 	} */
+    }
+
 }
