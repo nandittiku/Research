@@ -19,7 +19,6 @@ using namespace std;
 
 
 #define DEBUG 1
-#define STABILIZE_TIMER 100
 #define CREATE_RANDOMNESS 0
 
 
@@ -29,6 +28,7 @@ const int MAXID = 4096;
 const int m=12;	// log MAXID /log 2
 const int TIMEOUT=2;	// 1 second timeout...is this OK? 
 const int rDHT = 2*m;
+const int rLookup = 3;
 
 // i have decided to go for a priority queue based simulation; the caveat is that code cant be directly implemented;
 // on the other hand, simulation is easier and i'm more familiar with this model
@@ -52,6 +52,8 @@ double Clock;
 
 struct msg{
   unsigned int from; 
+  unsigned int origin; // lookup request origin
+  int lookupId;
   unsigned int to;
   unsigned int value;
   unsigned int value2;
@@ -78,7 +80,7 @@ class Event{
   }
  public:
   Event(){};
-  enum EvtType{node_dead, node_alive,lookup,lookup_reply, fix_fingers, stabilize, get_pred, stabilize_reply,notify, check_predecessor, ping, ping_reply, ping_timeout, stabilize_timeout, sign_state, recv_sign, initiate_path, extend_path, authenticateReply, authenticateRequest, getSuccAndPredRequest, getSuccAndPredReply, stabilizeSuccessorListRequest, stabilizeSuccessorList, stabilizeSuccessorListAuthenticate};
+  enum EvtType{node_dead, node_alive,lookup,lookup_reply, fix_fingers, stabilize, get_pred, stabilize_reply,notify, check_predecessor, ping, ping_reply, ping_timeout, stabilize_timeout, sign_state, recv_sign, initiate_path, extend_path, authenticateReply, authenticateRequest, getSuccAndPredRequest, getSuccAndPredReply, stabilizeSuccessorListRequest, stabilizeSuccessorList, stabilizeSuccessorListAuthenticate, secure_lookup, secure_lookupReply, secure_lookupRequest};
  Event(EvtType type, double etime, int id, struct msg message):_type(type),_etime(etime),_id(id),_message(message){}
   EvtType get_type(){return _type;}
   double get_time(){return _etime;}
@@ -193,6 +195,11 @@ void stabilizeSuccessorListAuthenticate (Event evt, struct node *n);
 unsigned int pred(unsigned int id);
 void verifySuccessorListCorrectness();
 int verifySuccessorListCorrectness(struct node* n, int pos);
+// secure lookup
+void secureLookup(Event evt, struct node *n);
+void secureLookupRequest(Event evt, struct node *n);
+void secureLookupReply(Event evt, struct node *n);
+
 
 double prob_unreliability[7];
 double path_count=0;
@@ -285,23 +292,32 @@ int main(int argc, char *argv[]){
       	// path of the lookup or what ?
       	// lets schedule a lookup_timeout
       	// we need to have a list of failed nodes in the path as well, to avoid them while backtracking
-      	struct msg message=evt.get_message();
-      	message.failed_nodes.insert(message.to);
-      	if(!message.path.empty()){
-      	  message.to=message.path.top();
-      	  message.path.pop();
-      	  Event evt2(Event::lookup,Clock+TIMEOUT,message.to,message);
-      	  FutureEventList.push(evt2);
-      	}
-		
-      	// ask prev node to do a lookup, while avoiding the failed nodes
+      	/* struct msg message=evt.get_message(); */
+      	/* message.failed_nodes.insert(message.to); */
+      	/* if(!message.path.empty()){ */
+      	/*   message.to=message.path.top(); */
+      	/*   message.path.pop(); */
+      	/*   Event evt2(Event::lookup,Clock+TIMEOUT,message.to,message); */
+      	/*   FutureEventList.push(evt2); */
+	cout<<"LOOKUP CALLED!!\n";
+      }
+      else if(evt.get_type()==Event::secure_lookup){
+	secureLookup(evt,n);
       }
     }
     else if(evt.get_type()==Event::lookup){
-      lookup(evt,n);
+      /* lookup(evt,n); */
+      cout<<"LOOKUP CALLED!!\n";
+    }
+    else if(evt.get_type()==Event::secure_lookup){
+      secureLookup(evt,n);
     }
     else if(evt.get_type()==Event::lookup_reply){
-      lookup_reply(evt,n);
+      /* lookup_reply(evt,n); */
+      cout<<"LOOKUP REPLY CALLED!!\n";
+    }
+    else if(evt.get_type()==Event::secure_lookupReply){
+      secureLookupReply(evt,n);
     }
     else if(evt.get_type()==Event::ping){
       ping(evt,n);
@@ -371,12 +387,10 @@ int main(int argc, char *argv[]){
   for(int i=0;i<7;i++){
     cout << prob_unreliability[i]/path_count << " ";
   }
-  cout << endl; 
+  cout << endl << endl; 
 
   verifySuccessorListCorrectness();
-
-  exit(1);
-	
+  cout << endl << endl; 
   // at the end of everything, lets check if most lookups succeed
   int k=0;
   for(int i=0;i<num_nodes;i++){
@@ -428,46 +442,48 @@ int main(int argc, char *argv[]){
     }
   }
   cout << "Number of nodes alive = " << idlist_alive.size() << endl;
-  exit(1);
+  cout << endl << endl; 
   // do we ever get here?
-  /* while(!FutureEventList.empty()){ */
-  /*   FutureEventList.pop(); */
-  /* } */
-  /* num_count=0; */
-  /* num_ttl=0; */
-  /* for(int i=0;i<10000;i++){		// code to measure average lookup path length */
-  /*   int random=rand()%num_nodes; */
-  /*   while(allnodes[random].alive==false){ */
-  /*     random=rand()%num_nodes; */
-  /*   } */
-  /*   struct msg message; */
-  /*   message.from=allnodes[random].id; */
-  /*   message.to=message.from; */
-  /*   message.value=rand()%MAXID; */
-  /*   message.ttl=0; */
-  /*   Event evt(Event::lookup,Clock,message.to,message); */
-  /*   FutureEventList.push(evt); */
-  /* } */
-  /* while(!FutureEventList.empty()){ */
-  /*   Event evt=FutureEventList.top(); */
-  /*   FutureEventList.pop(); */
-  /*   Clock=evt.get_time(); */
-  /*   struct node *n; */
-  /*   n=&allnodes[map[evt.get_id()]]; */
-  /*   assert(evt.get_id()==n->id); */
-  /*   if(evt.get_type()==Event::lookup){ */
-  /*     lookup(evt,n); */
-  /*   } */
-  /*   else if(evt.get_type()==Event::lookup_reply){ */
-  /*     lookup_reply(evt,n); */
-  /*   } */
-  /* } */
+  while(!FutureEventList.empty()){
+    FutureEventList.pop();
+  }
+  num_count=0;
+  num_ttl=0;
+  for(int i=0;i<10000;i++){		// code to measure average lookup path length
+    int random=rand()%num_nodes;
+    while(allnodes[random].alive==false){
+      random=rand()%num_nodes;
+    }
+    struct msg message;
+    message.from=allnodes[random].id;
+    message.to=message.from;
+    message.value=rand()%MAXID;
+    message.ttl=0;
+    Event evt(Event::secure_lookup,Clock,message.to,message);
+    FutureEventList.push(evt);
+  }
+  while(!FutureEventList.empty()){
+    Event evt=FutureEventList.top();
+    FutureEventList.pop();
+    Clock=evt.get_time();
+    struct node *n;
+    n=&allnodes[map[evt.get_id()]];
+    assert(evt.get_id()==n->id);
+    if(evt.get_type()==Event::secure_lookup){
+      secureLookup(evt,n);
+    }
+    else if(evt.get_type()==Event::secure_lookupRequest){
+      secureLookupRequest(evt,n);
+    }
+    else if(evt.get_type()==Event::secure_lookupReply){
+      secureLookupReply(evt,n);
+    }
+  }
 
-  /* cout << "Final time is " << Clock << endl; */
-  /* cout << "Total number of lookups is " << "10000" << endl; */
-  /* cout << "Total number of finished lookups is " << num_count << endl; */
-  /* cout << "Avg path length of finished lookups is " << num_ttl/num_count << endl; */
-  /* cout << "Probability of a successful lookup is " << num_count/10000.0 << endl; */
+  cout << "Final time is " << Clock << endl;
+  cout << "Total number of lookups is " << "10000" << endl;
+  cout << "Total number of finished lookups is " << num_count/rLookup << endl;
+  cout << "Probability of a successful lookup is " << (num_count/rLookup)/10000.0 << endl;
   return 0;
 }
 
@@ -634,77 +650,78 @@ void lookup(Event evt, struct node *n){		// lookup will be recursive and will ta
   // schedule lookup_result message
   //
 	
-  unsigned int me=n->id;
-  assert(me==evt.get_id());
-  struct msg message=evt.get_message();
+  /* unsigned int me=n->id; */
+  /* assert(me==evt.get_id()); */
+  /* struct msg message=evt.get_message(); */
 	
-  message.path.push(me);
+  /* message.path.push(me); */
 	
-  message.ttl++;
-  if(message.ttl>100){
-    return;	// just drop the packet
-  }
+  /* message.ttl++; */
+  /* if(message.ttl>100){ */
+  /*   return;	// just drop the packet */
+  /* } */
 	
-  // if looking for myself, i can just set up a lookup reply with my data.
-  if(message.value==me){
-    message.to=message.from;
-    message.from=me;
-    message.value2=me;
-    message.value3=n->fingertable[0];
-    message.value4=n->fingertable[1];
-    Event evt2(Event::lookup_reply,Clock+1,message.to,message);
-    FutureEventList.push(evt2);
-    return;
+  /* // if looking for myself, i can just set up a lookup reply with my data. */
+  /* if(message.value==me){ */
+  /*   message.to=message.from; */
+  /*   message.from=me; */
+  /*   message.value2=me; */
+  /*   message.value3=n->fingertable[0]; */
+  /*   message.value4=n->fingertable[1]; */
+  /*   Event evt2(Event::lookup_reply,Clock+1,message.to,message); */
+  /*   FutureEventList.push(evt2); */
+  /*   return; */
 
-  }
-  // else find id closest to the id you are looking for in my fingertable data.
-  if(simCanon_NodeId_Closer(me,message.value,n->fingertable[0])==message.value){
-    message.to=message.from;
-    message.from=me;
-    message.value2=n->fingertable[0];
-    message.value3=n->fingertable[1];
-    message.value4=n->fingertable[2];
-    Event evt2(Event::lookup_reply,Clock+1,message.to,message);
-    FutureEventList.push(evt2);
-    return;
-  }
-  unsigned int next_hop=me;
-  for(int i=0;i<3*m;i++){	// avoid failed nodes
-    if(simCanon_NodeId_Closer(next_hop,n->fingertable[i],message.value)==n->fingertable[i] && 
-       message.failed_nodes.find(n->fingertable[i])==message.failed_nodes.end()){
-      next_hop=n->fingertable[i];
-    }
-  }
-  // could not find it in my fingertable, so lets propogate the lookup to the next hop in my Chord lookup protocol
-  if(next_hop!=me){
-    message.to=next_hop;
-    Event evt2(Event::lookup,Clock+1,message.to,message);
-    FutureEventList.push(evt2);	
-  }
-  else{	// all preceeding nodes have failed...pick the first alive succ in the succ list and thats the result
-    //cout << me << " " << message.value << endl;
-    //cout << n->fingertable[0] << " " << n->fingertable[1] << " " << succ_alive(message.value) ;
-    //exit(1);
-    // if none exists then lookup has failed
-  }
-  // check the closest fingertable entry to id
-  // schedule lookup message
+  /* } */
+  /* // CHECK: return value if its in my succ list */
+  /* // else find id closest to the id you are looking for in my fingertable data. */
+  /* if(simCanon_NodeId_Closer(me,message.value,n->fingertable[0])==message.value){ */
+  /*   message.to=message.from; */
+  /*   message.from=me; */
+  /*   message.value2=n->fingertable[0]; */
+  /*   message.value3=n->fingertable[1]; */
+  /*   message.value4=n->fingertable[2]; */
+  /*   Event evt2(Event::lookup_reply,Clock+1,message.to,message); */
+  /*   FutureEventList.push(evt2); */
+  /*   return; */
+  /* } */
+  /* unsigned int next_hop=me; */
+  /* for(int i=0;i<3*m;i++){	// avoid failed nodes */
+  /*   if(simCanon_NodeId_Closer(next_hop,n->fingertable[i],message.value)==n->fingertable[i] &&  */
+  /*      message.failed_nodes.find(n->fingertable[i])==message.failed_nodes.end()){ */
+  /*     next_hop=n->fingertable[i]; */
+  /*   } */
+  /* } */
+  /* // could not find it in my fingertable, so lets propogate the lookup to the next hop in my Chord lookup protocol */
+  /* if(next_hop!=me){ */
+  /*   message.to=next_hop; */
+  /*   Event evt2(Event::lookup,Clock+1,message.to,message); */
+  /*   FutureEventList.push(evt2);	 */
+  /* } */
+  /* else{	// all preceeding nodes have failed...pick the first alive succ in the succ list and thats the result */
+  /*   //cout << me << " " << message.value << endl; */
+  /*   //cout << n->fingertable[0] << " " << n->fingertable[1] << " " << succ_alive(message.value) ; */
+  /*   //exit(1); */
+  /*   // if none exists then lookup has failed */
+  /* } */
+  /* // check the closest fingertable entry to id */
+  /* // schedule lookup message */
 }
 
 void lookup_reply(Event evt, struct node *n){
-  // change old finger to point to the correct finger
-  // if i dont get this message, there is nothing to do
+  /* // change old finger to point to the correct finger */
+  /* // if i dont get this message, there is nothing to do */
 	
-  struct msg message=evt.get_message();
-  num_count++;
-  num_ttl=num_ttl+message.ttl;
-  for(int i=2*m;i<3*m;i++){
-    if(n->fingerid[i]==message.value){
-      n->fingertable[i]=message.value2;
-      n->fingertable_succ1[i]=message.value3;
-      n->fingertable_succ2[i]=message.value4;
-    }
-  }
+  /* struct msg message=evt.get_message(); */
+  /* num_count++; */
+  /* num_ttl=num_ttl+message.ttl; */
+  /* for(int i=2*m;i<3*m;i++){ */
+  /*   if(n->fingerid[i]==message.value){ */
+  /*     n->fingertable[i]=message.value2; */
+  /*     n->fingertable_succ1[i]=message.value3; */
+  /*     n->fingertable_succ2[i]=message.value4; */
+  /*   } */
+  /* } */
 }
 
 // called periodically
@@ -750,10 +767,13 @@ void fix_fingers(Event evt, struct node *n){	// periodically refresh fingers
     message.to=n->fingertable[breakpoint-1];
   }
   message.value=n->fingerid[n->next];
-	
+  message.lookupId = n->next;
+
+
+  // send lookup msg to Rl nodes.	
   message.ttl=0;
   message.path.push(me);	// always set ttl before issuing a lookup and add initiator to the path! 
-  Event evt2(Event::lookup,Clock+1,message.to,message);
+  Event evt2(Event::secure_lookup,Clock+1,message.to,message);
   FutureEventList.push(evt2);
 
 
@@ -786,7 +806,7 @@ void fix_fingers(Event evt, struct node *n){	// periodically refresh fingers
   message2.ttl=0;
   message2.path.push(me);
   message2.to=me;
-  Event evt3(Event::lookup, Clock+1, message2.to,message2);
+  Event evt3(Event::secure_lookup, Clock+1, message2.to,message2);
   FutureEventList.push(evt3);
 
   breakpoint=3*m-1;
@@ -815,7 +835,7 @@ void fix_fingers(Event evt, struct node *n){	// periodically refresh fingers
   message3.ttl=0;
   message3.path.push(me);
   message3.to=me;
-  Event evt4(Event::lookup, Clock+1, message3.to,message3);
+  Event evt4(Event::secure_lookup, Clock+1, message3.to,message3);
   FutureEventList.push(evt4);
 
 
@@ -896,7 +916,7 @@ void notify(Event evt, struct node *n){	// i guess this is the action taken when
 
 // called periodically
 void stabilize(Event evt, struct node *n){	// key function to handle churn
-  printf("CALLED STABILIZE!! SHOULD NOT HAPPEN ++++++++++++++++++++++++\n");
+  printf("CALLED STABLIZE!! SHOULD NOT HAPPEN ++++++++++++++++++++++++\n");
   unsigned int me=n->id;
   assert(me==evt.get_id());
   struct msg message;
@@ -1251,7 +1271,7 @@ void debug(const char* s)
  * Start of Nandit's code *
  **************************/
 
-unsigned int verifyNode = 124;
+unsigned int verifyNode = 3958;
 
 /* Send stabilize request to nodes */
 void stabilizeSuccessorListRequest(Event evt, struct node *n)
@@ -1262,8 +1282,6 @@ void stabilizeSuccessorListRequest(Event evt, struct node *n)
   n->possibleSuccessors.clear(); // reset possibleSuccessors
   // Obtain the successorList and predecessorList of first rDHT nodes in the
   // current successor list
-  /* if(n->id == verifyNode) */
-  /*   cout<<"sending messages from "<<n->id<<endl; */
 
   // stabilize messages to successors and predecessors
   for (int i = 0; i < rDHT; ++i)
@@ -1284,12 +1302,12 @@ void stabilizeSuccessorListRequest(Event evt, struct node *n)
       FutureEventList.push(evt3);
     }
 
-  // stabilize the list after ~20 seconds
+  // stabilize the list after ~10 seconds
   struct msg message;
   message.from = n->id;
   message.to = n->id;
 
-  Event evt2(Event::stabilizeSuccessorListAuthenticate,Clock+STABILIZE_TIMER,message.to,message);
+  Event evt2(Event::stabilizeSuccessorListAuthenticate,Clock+5,message.to,message);
   FutureEventList.push(evt2);
 }
 
@@ -1366,7 +1384,7 @@ void stabilizeSuccessorListAuthenticate (Event evt, struct node *n)
   struct msg message;
   message.to=n->id;
   message.from=n->id;
-  Event evt2(Event::stabilizeSuccessorList,Clock+STABILIZE_TIMER,message.to,message);
+  Event evt2(Event::stabilizeSuccessorList,Clock+stabilize_timer,message.to,message);
   FutureEventList.push(evt2);
 }
 
@@ -1375,15 +1393,6 @@ void stabilizeSuccessorList (Event evt, struct node *n)
   /* debug("stabilizeSuccessorList"); */
   // now that you have information form all nodes lets stabilize this thing
   // 2*m is the number of nodes we want in our successor list
-
-  /* if(n->id == verifyNode) */
-  /*   { */
-  /*     set<unsigned int>::iterator it; */
-  /*     cout<<"possible successors"<<endl; */
-  /*     for ( it=n->possibleSuccessors.begin() ; it != n->possibleSuccessors.end(); it++ ) */
-  /* 	if(*it != n->id) */
-  /* 	cout<<"  "<<*it<<endl; */
-  /*   } */
 
   set<unsigned int>::iterator it;
   int count = 0;
@@ -1414,7 +1423,7 @@ void stabilizeSuccessorList (Event evt, struct node *n)
   struct msg message;
   message.to=n->id;
   message.from=n->id;
-  Event evt2(Event::stabilizeSuccessorListRequest,Clock+STABILIZE_TIMER,message.to,message);
+  Event evt2(Event::stabilizeSuccessorListRequest,Clock+stabilize_timer,message.to,message);
   FutureEventList.push(evt2);
 }
 
@@ -1452,7 +1461,7 @@ void authenticateRequest (Event evt, struct node *n)
   replyMessage.from = n->id;
   replyMessage.to = message.from;
 
-  Event evt2(Event::authenticateReply, Clock+TIMEOUT, replyMessage.to, replyMessage);
+  Event evt2(Event::authenticateReply, Clock+1, replyMessage.to, replyMessage);
   FutureEventList.push(evt2);
 }
 
@@ -1511,44 +1520,155 @@ void verifySuccessorListCorrectness()
 
 int verifySuccessorListCorrectness(struct node *n, int pos)
 {
-  // find location of node first
-  /* if(n->id == verifyNode) */
-  /* cout<<"verifying node "<<n->id<<"  at position "<<pos<<endl; */
-  pos = (pos+1)%num_nodes;
-
-  int incorrect = 0;
-  for (int i = 0; i < 2*m; ++i)
+  // create the correct set of successor list for this node.
+  int num = 0;
+  int i = 0;
+  set<unsigned int> expectedList;
+  while(num<2*m)
     {
-      /* if(n->id == 3327) */
-      /* cout<<"  "<<allnodesIds[(pos+i)%num_nodes]<<" => "<<n->fingertable[i]<< endl; */
-      if(n->fingertable[i] != allnodesIds[(pos+i)%num_nodes])
-  	{
-  	  incorrect++;
-  	  //	  printf("ERROR: FINGERTABLE FOR %d IS INCORRECT\n", n->id);
-  	  // exit(0);
-  	}
+      struct node* temp = &allnodes[map[allnodesIds[(pos+i)%num_nodes]]];
+      if (temp->alive && temp->id != n->id)
+	{
+	  expectedList.insert(temp->id);
+	  num++;
+	}
+      i++;
     }
-  /* cout<<"node "<<n->id<<endl; */
-  /* for (int i = 2*m+1; i < 3*m; ++i) */
+
+  // find intersection
+  int incorrect = 0;
+  set<unsigned int>::iterator it;
+  for (i = 0; i < 2*m; ++i)
+    {
+      it = expectedList.find(n->fingertable[i]);
+      if(it == expectedList.end())
+	incorrect++;
+    }
+
+  /* if(verifyNode == n->id) */
   /*   { */
-  /*     /\* if(n->id == 124) *\/ */
-  /*     /\* cout<<"  "<<allnodesIds[(pos+i)%num_nodes]<<" => "<<n->fingertable[i]<< endl; *\/ */
-  /*     /\* while ( idlist_alive.find ( allnodesIds[(pos+i)%num_nodes] ) != idlist_alive.end() ) *\/ */
-  /*     /\* 	      pos = (pos+1)%num_nodes; *\/ */
+  /*     cout<<endl<<"expected result"<<endl; */
+  /*     for ( it=expectedList.begin() ; it != expectedList.end(); it++ ) */
+  /* 	{ */
+  /* 	  cout<<"  "<<*it<<endl; */
+  /* 	} */
 
-
-  /*     /\* if(n->fingertable[i] != allnodesIds[(pos+i)%num_nodes]) *\/ */
-  /*     /\* 	{ *\/ */
-  /*     /\* 	  incorrect++; *\/ */
-  /*     /\* 	  //	  printf("ERROR: FINGERTABLE FOR %d IS INCORRECT\n", n->id); *\/ */
-  /*     /\* 	  // exit(0); *\/ */
-  /*     /\* 	} *\/ */
-  /*     int area = (n->id + (int)pow(2, i - (2*m))); */
-  /*     set<unsigned int>::iterator it; */
-  /*     it = idlist_alive.upper_bound(area); */
-  /*     cout<<"  "<<area<<" => "<<n->fingertable[i]<<" "<<*it<<endl; */
+  /*     cout<<endl; */
+  /*     cout<<"my list"<<endl; */
+  /*     for (i = 0; i < 2*m; i++) */
+  /* 	{ */
+  /* 	  cout<<"  "<<n->fingertable[i]<<endl; */
+  /* 	}  */
+  /*     cout<<endl; */
   /*   } */
-  /* exit(0); */
 
   return incorrect;
+}
+
+
+/*******************
+ *  Secure Lookup  *
+ *******************/
+
+void secureLookup(Event evt, struct node *n)
+{
+  // depending on rLookup send secure lookup request to that many nodes in your finger table.
+
+  set<unsigned int> randomNodes;
+  while( randomNodes.size() < (unsigned int)rLookup )
+    {
+      int nodeId = (2*m) + 1 + rand()%m;
+      if(randomNodes.find(nodeId) == randomNodes.end())
+	{
+	  randomNodes.insert(nodeId);
+	}
+    }
+
+  set<unsigned int>::iterator it;
+  struct msg message=evt.get_message();
+  message.origin = n->id;
+
+  for ( it = randomNodes.begin() ; it != randomNodes.end(); it++ )
+    {
+      message.to = n->fingertable[*it];
+      Event evt2(Event::secure_lookupRequest,Clock+1,message.to,message);
+      FutureEventList.push(evt2);
+    }
+
+}
+
+void secureLookupRequest(Event evt, struct node *n)
+{
+	
+  unsigned int me=n->id;
+  assert(me==evt.get_id());
+  struct msg message=evt.get_message();
+	
+  message.path.push(me);
+	
+  // if looking for myself, i can just set up a lookup reply with my data.
+  if(message.value==me){
+    message.to=message.origin;
+    message.from=me;
+    message.value2=me;
+    message.value3=n->fingertable[0];
+    message.value4=n->fingertable[1];
+    Event evt2(Event::secure_lookupReply,Clock+1,message.to,message);
+    FutureEventList.push(evt2);
+    return;
+
+  }
+  // CHECK: return value if its in my succ list
+  // else find id closest to the id you are looking for in my fingertable data.
+  if(simCanon_NodeId_Closer(me,message.value,n->fingertable[0])==message.value){
+    message.to=message.origin;
+    message.from=me;
+    message.value2=n->fingertable[0];
+    message.value3=n->fingertable[1];
+    message.value4=n->fingertable[2];
+    Event evt2(Event::secure_lookupReply,Clock+1,message.to,message);
+    FutureEventList.push(evt2);
+    return;
+  }
+  unsigned int next_hop=me;
+  for(int i=0;i<3*m;i++){	// avoid failed nodes
+    if(simCanon_NodeId_Closer(next_hop,n->fingertable[i],message.value)==n->fingertable[i] && 
+       message.failed_nodes.find(n->fingertable[i])==message.failed_nodes.end()){
+      next_hop=n->fingertable[i];
+    }
+  }
+  // could not find it in my fingertable, so lets propogate the lookup to the next hop in my Chord lookup protocol
+  if(next_hop!=me){
+    message.to=next_hop;
+    Event evt2(Event::secure_lookupRequest,Clock+1,message.to,message);
+    FutureEventList.push(evt2);	
+  }
+  else{	// all preceeding nodes have failed...pick the first alive succ in the succ list and thats the result
+    //cout << me << " " << message.value << endl;
+    //cout << n->fingertable[0] << " " << n->fingertable[1] << " " << succ_alive(message.value) ;
+    //exit(1);
+    // if none exists then lookup has failed
+  }
+  // check the closest fingertable entry to id
+  // schedule lookup message
+}
+
+void secureLookupReply(Event evt, struct node *n)
+{
+  // add to the lookup request
+  struct msg message=evt.get_message();
+  num_count++;
+
+  for(int i=2*m;i<3*m;i++){
+    if(i==message.lookupId){
+      // check if message.value2 is closer than current data in fingertable at i compared to message.value
+      if( message.value - n->fingertable[i] > message.value - message.value2 )
+  	{
+  	  n->fingertable[i]=message.value2;
+  	  n->fingertable_succ1[i]=message.value3;
+  	  n->fingertable_succ2[i]=message.value4;
+  	}
+    }
+  }
+
 }
