@@ -18,17 +18,19 @@ using namespace __gnu_cxx;
 using namespace std;
 
 
+#define DISABLE_STABILIZE 1 // disable stabilize function. used for testing lookups etc.
+
 #define DEBUG 1
 #define CREATE_RANDOMNESS 0
 
 
-//int MAXID = 1048576;
-//const int m=20;	// log MAXID /log 2
-const int MAXID = 4096;
-const int m=12;	// log MAXID /log 2
+int MAXID = 1048576;
+const int m=20;	// log MAXID /log 2
+/* const int MAXID = 4096; */
+/* const int m=12;	// log MAXID /log 2 */
 const int TIMEOUT=2;	// 1 second timeout...is this OK? 
 const int rDHT = 2*m;
-const int rLookup = 3;
+int rLookup = 1;
 
 // i have decided to go for a priority queue based simulation; the caveat is that code cant be directly implemented;
 // on the other hand, simulation is easier and i'm more familiar with this model
@@ -142,6 +144,10 @@ struct node{
   unordered_map<unsigned int, unsigned int> possibleSuccessorsIP; // let these store the ip
   unordered_map<unsigned int, int> possibleSuccessorsStatus;
   unordered_map<unsigned int, int> possiblePredStatus;
+
+  // needed just for testing lookup success rate
+  set<unsigned int> alreadyLookedUpList;
+  int iAmMalicious; // am I a malicious node?
 };
 
 
@@ -153,6 +159,7 @@ double mean_alive_rate;
 set<unsigned int> idlist,idlist_alive;
 unordered_map<unsigned int, int> map;
 double num_count=0, num_ttl=0;
+double num_new_lookup=0;
 void init(struct node *n);	// ok
 void state_init_oracle(struct node *n);	// ok
 unsigned int succ(unsigned int id);	// ok
@@ -219,8 +226,8 @@ int main(int argc, char *argv[]){
 
   // note that m should be close to log n, since the size of succ list should be 2*log n
   assert(pow(2,m)==MAXID);
-  if(argc!=10){
-    cout << "Usage: ./a.out num_nodes check_predecessor_timer stabilize_timer fix_fingers_timer sign_timer path_timer mean_alive simulation_time random_seed" << endl;
+  if(argc!=11){
+    cout << "Usage: ./a.out num_nodes check_predecessor_timer stabilize_timer fix_fingers_timer sign_timer path_timer mean_alive simulation_time random_seed rLookup" << endl;
     exit(1);
   }
   num_nodes=atoi(argv[1]);
@@ -233,6 +240,7 @@ int main(int argc, char *argv[]){
   mean_alive=atoi(argv[7]);
   simulation_time=atoi(argv[8]);
   srand(atoi(argv[9]));
+  rLookup = atoi(argv[10]);
   mean_alive_rate=1.0/(double)mean_alive;
 	
 
@@ -373,15 +381,18 @@ int main(int argc, char *argv[]){
     else if(evt.get_type()==Event::getSuccAndPredReply){
       getSuccAndPredReply(evt, n);
     }
-    else if(evt.get_type()==Event::stabilizeSuccessorListRequest){
-      stabilizeSuccessorListRequest(evt, n);
-    }
-    else if(evt.get_type()==Event::stabilizeSuccessorList){
-      stabilizeSuccessorList(evt, n);
-    }
-    else if(evt.get_type()==Event::stabilizeSuccessorListAuthenticate){
-      stabilizeSuccessorListAuthenticate(evt, n);
-    }
+    if(!DISABLE_STABILIZE)
+      {
+	if(evt.get_type()==Event::stabilizeSuccessorListRequest){
+	  stabilizeSuccessorListRequest(evt, n);
+	}
+	else if(evt.get_type()==Event::stabilizeSuccessorList){
+	  stabilizeSuccessorList(evt, n);
+	}
+	else if(evt.get_type()==Event::stabilizeSuccessorListAuthenticate){
+	  stabilizeSuccessorListAuthenticate(evt, n);
+	}
+      }
   }
 
   for(int i=0;i<7;i++){
@@ -390,65 +401,64 @@ int main(int argc, char *argv[]){
   cout << endl << endl; 
 
   verifySuccessorListCorrectness();
-  cout << endl << endl; 
-  // at the end of everything, lets check if most lookups succeed
-  int k=0;
-  for(int i=0;i<num_nodes;i++){
-    double correct_count6=0, correct_count8=0;
-    double correct_count4=0;
-    double correct_count2=0;
-    double correct_count=0;
-    double correct_count10=0,correct_count12=0;
-    if(allnodes[i].alive==true){
+  /* cout << endl << endl;  */
+  /* // at the end of everything, lets check if most lookups succeed */
+  /* int k=0; */
+  /* for(int i=0;i<num_nodes;i++){ */
+  /*   double correct_count6=0, correct_count8=0; */
+  /*   double correct_count4=0; */
+  /*   double correct_count2=0; */
+  /*   double correct_count=0; */
+  /*   double correct_count10=0,correct_count12=0; */
+  /*   if(allnodes[i].alive==true){ */
 			
-      if(allnodes[i].fingertable[0]==succ_alive(allnodes[i].id+1)){
-	correct_count4++;
-      }
+  /*     if(allnodes[i].fingertable[0]==succ_alive(allnodes[i].id+1)){ */
+  /* 	correct_count4++; */
+  /*     } */
 
-      for(int j=1;j<2*m;j++){
-	if(allnodes[i].fingertable[j]==succ_alive(allnodes[i].fingertable[j-1]+1)){
-	  correct_count2++;
-	}
-      }
+  /*     for(int j=1;j<2*m;j++){ */
+  /* 	if(allnodes[i].fingertable[j]==succ_alive(allnodes[i].fingertable[j-1]+1)){ */
+  /* 	  correct_count2++; */
+  /* 	} */
+  /*     } */
 
 			
-      for(int j=2*m;j<3*m;j++){
-	if(allnodes[i].fingertable[j]==succ_alive(allnodes[i].fingerid[j])){
-	  correct_count++;
-	}
-	if(allnodes[i].fingertable_succ1[j]==succ_alive(allnodes[i].fingertable[j]+1)){
-	  correct_count10++;
-	}
-	if(allnodes[i].fingertable_succ2[j]==succ_alive(allnodes[i].fingertable_succ1[j]+1)){
-	  correct_count12++;
-	}
+  /*     for(int j=2*m;j<3*m;j++){ */
+  /* 	if(allnodes[i].fingertable[j]==succ_alive(allnodes[i].fingerid[j])){ */
+  /* 	  correct_count++; */
+  /* 	} */
+  /* 	if(allnodes[i].fingertable_succ1[j]==succ_alive(allnodes[i].fingertable[j]+1)){ */
+  /* 	  correct_count10++; */
+  /* 	} */
+  /* 	if(allnodes[i].fingertable_succ2[j]==succ_alive(allnodes[i].fingertable_succ1[j]+1)){ */
+  /* 	  correct_count12++; */
+  /* 	} */
 
-	assert(allnodes[i].succ1.id==allnodes[i].fingertable[0]);
-	if(allnodes[i].succ1.fingertable[j]==succ_alive(allnodes[map[allnodes[i].fingertable[0]]].fingerid[j])){
-	  correct_count6++;
-	}
-	assert(allnodes[i].succ2.id==allnodes[i].fingertable[1]);
-	if(allnodes[i].succ2.fingertable[j]==succ_alive(allnodes[map[allnodes[i].fingertable[1]]].fingerid[j])){
-	  correct_count8++;
-	}
+  /* 	assert(allnodes[i].succ1.id==allnodes[i].fingertable[0]); */
+  /* 	if(allnodes[i].succ1.fingertable[j]==succ_alive(allnodes[map[allnodes[i].fingertable[0]]].fingerid[j])){ */
+  /* 	  correct_count6++; */
+  /* 	} */
+  /* 	assert(allnodes[i].succ2.id==allnodes[i].fingertable[1]); */
+  /* 	if(allnodes[i].succ2.fingertable[j]==succ_alive(allnodes[map[allnodes[i].fingertable[1]]].fingerid[j])){ */
+  /* 	  correct_count8++; */
+  /* 	} */
 
 
-      }
-      assert(correct_count10 <=m);
-      cout << k << " " << correct_count4 << " " << correct_count2/(double)(2*m-1)  << " " << correct_count/(double)m << " " << correct_count6/(double)m << " " 
-	   << correct_count8/(double)m<< " " << correct_count10/(double)m <<  " " << correct_count12/(double)m << endl;
-      k++;
+  /*     } */
+  /*     assert(correct_count10 <=m); */
+  /*     cout << k << " " << correct_count4 << " " << correct_count2/(double)(2*m-1)  << " " << correct_count/(double)m << " " << correct_count6/(double)m << " "  */
+  /* 	   << correct_count8/(double)m<< " " << correct_count10/(double)m <<  " " << correct_count12/(double)m << endl; */
+  /*     k++; */
 
-    }
-  }
+  /*   } */
+  /* } */
   cout << "Number of nodes alive = " << idlist_alive.size() << endl;
   cout << endl << endl; 
   // do we ever get here?
   while(!FutureEventList.empty()){
     FutureEventList.pop();
   }
-  num_count=0;
-  num_ttl=0;
+
   for(int i=0;i<10000;i++){		// code to measure average lookup path length
     int random=rand()%num_nodes;
     while(allnodes[random].alive==false){
@@ -462,28 +472,89 @@ int main(int argc, char *argv[]){
     Event evt(Event::secure_lookup,Clock,message.to,message);
     FutureEventList.push(evt);
   }
-  while(!FutureEventList.empty()){
-    Event evt=FutureEventList.top();
-    FutureEventList.pop();
-    Clock=evt.get_time();
-    struct node *n;
-    n=&allnodes[map[evt.get_id()]];
-    assert(evt.get_id()==n->id);
-    if(evt.get_type()==Event::secure_lookup){
-      secureLookup(evt,n);
-    }
-    else if(evt.get_type()==Event::secure_lookupRequest){
-      secureLookupRequest(evt,n);
-    }
-    else if(evt.get_type()==Event::secure_lookupReply){
-      secureLookupReply(evt,n);
-    }
-  }
 
-  cout << "Final time is " << Clock << endl;
-  cout << "Total number of lookups is " << "10000" << endl;
-  cout << "Total number of finished lookups is " << num_count/rLookup << endl;
-  cout << "Probability of a successful lookup is " << (num_count/rLookup)/10000.0 << endl;
+  cout<<endl<<endl;
+  unordered_map<int, double> successMap;
+  // repeat for different % of malicious nodes f
+  int f;
+  cout<<"num nodes = "<<num_nodes<<" rLookup = "<<rLookup<<endl;
+  for(f=0; f<=25; f+=1)
+    {
+      // reset counters
+      priority_queue<Event> tempFutureEventList;
+      num_count=0;
+      num_ttl=0;
+      num_new_lookup=0;
+      // make all nodes non-malicious
+      for(int i=0; i<num_nodes; i++)
+	{
+	  allnodes[i].iAmMalicious = 0;
+	  allnodes[i].alreadyLookedUpList.clear();
+	}
+      // make %f nodes malicious
+      int num_malicious_nodes = (f*num_nodes)/100;
+      int count_malicious_nodes = 0;
+      int random;
+      while(count_malicious_nodes < num_malicious_nodes)
+	{
+	  random=rand()%num_nodes;
+	  if(allnodes[random].iAmMalicious != 1)
+	    {
+	      allnodes[random].iAmMalicious = 1;
+	      count_malicious_nodes++;
+	    }
+	}
+
+      while(!FutureEventList.empty()){
+	Event evt=FutureEventList.top();
+	FutureEventList.pop();
+
+	Clock=evt.get_time();
+	struct node *n;
+	n=&allnodes[map[evt.get_id()]];
+	assert(evt.get_id()==n->id);
+	if(evt.get_type()==Event::secure_lookup){
+	  tempFutureEventList.push(evt);
+	  secureLookup(evt,n);
+	}
+	else if(evt.get_type()==Event::secure_lookupRequest){
+	  // if n->id is malicious then drop packet
+	  if(n->iAmMalicious != 1)
+	    {
+	      secureLookupRequest(evt,n);
+	    }
+	}
+	else if(evt.get_type()==Event::secure_lookupReply){
+	  secureLookupReply(evt,n);
+	}
+      }
+
+      cout << "f="<<f<<"% malicious nodes="<<num_malicious_nodes<<"/"<<num_nodes<<endl;
+      /* cout << "Total number of unique lookups requested is 10000" << endl; */
+      /* cout << "Total number of actual lookups requested is " << 10000*rLookup << endl; */
+      /* cout << "Total number of finished lookups is " << num_count << endl; */
+      /* cout << "Total number of actual finished lookups is " << num_new_lookup << endl; */
+      /* cout << "Probability of a successful lookup is " << num_new_lookup/10000.0 << endl; */
+      /* cout << endl; */
+
+      // copy into future eventlist
+      while(!tempFutureEventList.empty())
+	{
+	  Event evt = tempFutureEventList.top();
+	  tempFutureEventList.pop();
+	  FutureEventList.push(evt);
+	}
+      successMap[f] = num_new_lookup/100.0;
+    }
+
+  /* cout << "Final time is " << Clock << endl; */
+
+  cout<<"Final data"<<endl;
+
+  for(f=0; f<=25; f+=1)
+    cout<<"f="<<f<<"  "<<successMap[f]<<"% success"<<endl;
+  cout<<endl;
+
   return 0;
 }
 
@@ -1495,27 +1566,27 @@ int compare (const void * a, const void * b)
 
 void verifySuccessorListCorrectness()
 {
-  cout<<"First node = "<<allnodesIds[0]<<"   Last node = "<<allnodesIds[num_nodes-1]<<endl;
-  int totalIncorrect = 0;
-  for (int i = 0; i < num_nodes; ++i)
-    {
-      struct node *n;
-      n = &allnodes[map[allnodesIds[i]]];
-      // verifiy correctness of successor list of this node
+  /* cout<<"First node = "<<allnodesIds[0]<<"   Last node = "<<allnodesIds[num_nodes-1]<<endl; */
+  /* int totalIncorrect = 0; */
+  /* for (int i = 0; i < num_nodes; ++i) */
+  /*   { */
+  /*     struct node *n; */
+  /*     n = &allnodes[map[allnodesIds[i]]]; */
+  /*     // verifiy correctness of successor list of this node */
 
-      int incorrect = verifySuccessorListCorrectness(n, i);
-      int valid = (2*m)-incorrect;
-      cout<<n->id<<" "<<100*valid/(2*m)<<"%"<<" "<<valid<<" valid out of "<<2*m;
-      if(idlist_alive.find(n->id) == idlist_alive.end())
-	{
-	  cout<<"  DEAD";
-	}
-      cout<<endl;
-      totalIncorrect += incorrect;
-    }
+  /*     int incorrect = verifySuccessorListCorrectness(n, i); */
+  /*     int valid = (2*m)-incorrect; */
+  /*     cout<<n->id<<" "<<100*valid/(2*m)<<"%"<<" "<<valid<<" valid out of "<<2*m; */
+  /*     if(idlist_alive.find(n->id) == idlist_alive.end()) */
+  /* 	{ */
+  /* 	  cout<<"  DEAD"; */
+  /* 	} */
+  /*     cout<<endl; */
+  /*     totalIncorrect += incorrect; */
+  /*   } */
 
 
-  cout<<"Total Correct = "<<100*(num_nodes*2*m - totalIncorrect)/(num_nodes*2*m)<<"% "<< 2*m*num_nodes - totalIncorrect<<" valid out of "<<num_nodes*2*m<<endl;
+  /* cout<<"Total Correct = "<<100*(num_nodes*2*m - totalIncorrect)/(num_nodes*2*m)<<"% "<< 2*m*num_nodes - totalIncorrect<<" valid out of "<<num_nodes*2*m<<endl; */
 }
 
 int verifySuccessorListCorrectness(struct node *n, int pos)
@@ -1653,10 +1724,20 @@ void secureLookupRequest(Event evt, struct node *n)
   // schedule lookup message
 }
 
+/**
+ * On lookup reply check to see if the returned data is more 'accurate' than current data. If so, then replace, else forget.
+ */
 void secureLookupReply(Event evt, struct node *n)
 {
   // add to the lookup request
   struct msg message=evt.get_message();
+
+  if(n->alreadyLookedUpList.find(message.value) == n->alreadyLookedUpList.end())
+    {
+      // new lookup
+      n->alreadyLookedUpList.insert(message.value);
+      num_new_lookup++;
+    }
   num_count++;
 
   for(int i=2*m;i<3*m;i++){
