@@ -553,6 +553,11 @@ int main(int argc, char *argv[]){
 
   for(f=0; f<=25; f+=1)
     cout<<"f="<<f<<"  "<<successMap[f]<<"% success"<<endl;
+  cout<<endl<<endl;
+  cout<<"plot data"<<endl<<endl;
+
+  for(f=0; f<=25; f+=1)
+    cout<<successMap[f]<<endl;
   cout<<endl;
 
   return 0;

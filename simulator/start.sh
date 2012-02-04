@@ -1,5 +1,5 @@
 #!/bin/bash
-num_nodes=2000
+num_nodes=3000
 check_predecessor_timer=10
 let stabilize_timer=2
 fix_fingers_timer=2
@@ -12,7 +12,7 @@ rLookup=1
 #echo ./sim $num_nodes $check_predecessor_timer $stabilize_timer $fix_fingers_timer $sign_timer $path_timer $mean_alive $simulation_time $random_seed $rLookup
 #time ./sim $num_nodes $check_predecessor_timer $stabilize_timer $fix_fingers_timer $sign_timer $path_timer $mean_alive $simulation_time $random_seed $rLookup
 
-for rLookup in 1 2 3 4 5 6 7 8 9 10 11 12
+for rLookup in 7 8 9 10 11 12
 do
 	echo $rLookup
 	time ./sim $num_nodes $check_predecessor_timer $stabilize_timer $fix_fingers_timer $sign_timer $path_timer $mean_alive $simulation_time $random_seed $rLookup > data/lookup/rLookup=$rLookup
