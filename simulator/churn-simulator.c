@@ -24,7 +24,7 @@ using namespace std;
 #define CREATE_RANDOMNESS 0
 
 
-int MAXID = 1048576;
+long int MAXID = 1048576;
 const int m=20;	// log MAXID /log 2
 /* const int MAXID = 4096; */
 /* const int m=12;	// log MAXID /log 2 */
