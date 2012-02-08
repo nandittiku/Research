@@ -1694,7 +1694,6 @@ void secureLookupRequest(Event evt, struct node *n)
     return;
 
   }
-  // CHECK: return value if its in my succ list
   // else find id closest to the id you are looking for in my fingertable data.
   if(simCanon_NodeId_Closer(me,message.value,n->fingertable[0])==message.value){
     message.to=message.origin;
