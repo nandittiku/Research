@@ -260,147 +260,147 @@ int main(int argc, char *argv[]){
     assert(allnodes[i].alive==true);
   }
 
-  // Perform the actions in the events queue
-  while(!FutureEventList.empty() && Clock < simulation_time ){
-    Event evt=FutureEventList.top();
-    FutureEventList.pop();
-    Clock=evt.get_time();
-    struct node * n;
+  /* // Perform the actions in the events queue */
+  /* while(!FutureEventList.empty() && Clock < simulation_time ){ */
+  /*   Event evt=FutureEventList.top(); */
+  /*   FutureEventList.pop(); */
+  /*   Clock=evt.get_time(); */
+  /*   struct node * n; */
 
-    n=&allnodes[map[evt.get_id()]];
+  /*   n=&allnodes[map[evt.get_id()]]; */
 
-    if(evt.get_id() != n->id)
-      printf("%d %d %d %d\n", evt.get_id(), n->id, evt.get_type(), map[evt.get_id()]);
-    assert(evt.get_id()==n->id);
-    if(n->alive==0){
-      // the node is dead
-      // two cases are interesting...that of the ping message, and node_alive
-      // more interesting cases...get_pred and lookup
-      if(evt.get_type()==Event::ping){
-	// set up a dead message
-	struct msg message=evt.get_message();
-	message.to=message.from;
-	message.from=n->id;	// this is not a real message but a simple way of initiating a timeout
-	Event evt2(Event::ping_timeout,Clock+TIMEOUT,message.to,message);
-	FutureEventList.push(evt2);
-      }
-      else if(evt.get_type()==Event::node_alive){
-	node_alive(evt,n);
-      }
-      else if(evt.get_type()==Event::get_pred){ // this should make stabilization fault tolerant
-	// stabilize_timeout
-	/* struct msg message=evt.get_message(); */
-	/* message.to=message.from; */
-	/* message.from=n->id; */
-	/* Event evt2(Event::stabilize_timeout, Clock+TIMEOUT,message.to,message); */
-	/* FutureEventList.push(evt2); */
-      }
-      else if(evt.get_type()==Event::lookup){	// this should make lookups fault tolerant
-      	// lookup_timeout ..but what if the destination of lookup_timeout is also dead..do we need to store the entire
-      	// path of the lookup or what ?
-      	// lets schedule a lookup_timeout
-      	// we need to have a list of failed nodes in the path as well, to avoid them while backtracking
-      	/* struct msg message=evt.get_message(); */
-      	/* message.failed_nodes.insert(message.to); */
-      	/* if(!message.path.empty()){ */
-      	/*   message.to=message.path.top(); */
-      	/*   message.path.pop(); */
-      	/*   Event evt2(Event::lookup,Clock+TIMEOUT,message.to,message); */
-      	/*   FutureEventList.push(evt2); */
-	cout<<"LOOKUP CALLED!!\n";
-      }
-      else if(evt.get_type()==Event::secure_lookup){
-	secureLookup(evt,n);
-      }
-    }
-    else if(evt.get_type()==Event::lookup){
-      /* lookup(evt,n); */
-      cout<<"LOOKUP CALLED!!\n";
-    }
-    else if(evt.get_type()==Event::secure_lookup){
-      secureLookup(evt,n);
-    }
-    else if(evt.get_type()==Event::lookup_reply){
-      /* lookup_reply(evt,n); */
-      cout<<"LOOKUP REPLY CALLED!!\n";
-    }
-    else if(evt.get_type()==Event::secure_lookupReply){
-      secureLookupReply(evt,n);
-    }
-    else if(evt.get_type()==Event::ping){
-      ping(evt,n);
-    }
-    else if(evt.get_type()==Event::ping_reply){
-      ping_reply(evt,n);
-    }
-    else if(evt.get_type()==Event::get_pred){
-      get_pred(evt,n);
-    }
-    else if(evt.get_type()==Event::stabilize_reply){
-      stabilize_reply(evt,n);
-    }
-    else if(evt.get_type()==Event::stabilize_timeout){
-      stabilize_timeout(evt,n);
-    }		
-    else if(evt.get_type()==Event::fix_fingers){
-      fix_fingers(evt,n);
-    }
-    else if(evt.get_type()==Event::notify){
-      notify(evt,n);
-    }
-    else if(evt.get_type()==Event::check_predecessor){
-      check_predecessor(evt,n);
-    }
-    else if(evt.get_type()==Event::ping_timeout){
-      ping_timeout(evt,n);
-    }
-    else if(evt.get_type()==Event::node_dead){
-      node_dead(evt,n);
-    }
-    else if(evt.get_type()==Event::sign_state){
-      sign_state(evt,n);
-    }
-    else if(evt.get_type()==Event::recv_sign){
-      recv_sign(evt,n);
-    }
-    else if(evt.get_type()==Event::initiate_path){
-      initiate_path(evt,n);
-    }
-    else if(evt.get_type()==Event::extend_path){
-      extend_path(evt,n);
-    }
-    else if(evt.get_type()==Event::authenticateReply){
-      authenticateReply(evt, n);
-    }
-    else if(evt.get_type()==Event::authenticateRequest){
-      authenticateRequest(evt, n);
-    }
-    else if(evt.get_type()==Event::getSuccAndPredRequest){
-      getSuccAndPredRequest(evt, n);
-    }
-    else if(evt.get_type()==Event::getSuccAndPredReply){
-      getSuccAndPredReply(evt, n);
-    }
-    if(!DISABLE_STABILIZE)
-      {
-	if(evt.get_type()==Event::stabilizeSuccessorListRequest){
-	  stabilizeSuccessorListRequest(evt, n);
-	}
-	else if(evt.get_type()==Event::stabilizeSuccessorList){
-	  stabilizeSuccessorList(evt, n);
-	}
-	else if(evt.get_type()==Event::stabilizeSuccessorListAuthenticate){
-	  stabilizeSuccessorListAuthenticate(evt, n);
-	}
-      }
-  }
+  /*   if(evt.get_id() != n->id) */
+  /*     printf("%d %d %d %d\n", evt.get_id(), n->id, evt.get_type(), map[evt.get_id()]); */
+  /*   assert(evt.get_id()==n->id); */
+  /*   if(n->alive==0){ */
+  /*     // the node is dead */
+  /*     // two cases are interesting...that of the ping message, and node_alive */
+  /*     // more interesting cases...get_pred and lookup */
+  /*     if(evt.get_type()==Event::ping){ */
+  /* 	// set up a dead message */
+  /* 	struct msg message=evt.get_message(); */
+  /* 	message.to=message.from; */
+  /* 	message.from=n->id;	// this is not a real message but a simple way of initiating a timeout */
+  /* 	Event evt2(Event::ping_timeout,Clock+TIMEOUT,message.to,message); */
+  /* 	FutureEventList.push(evt2); */
+  /*     } */
+  /*     else if(evt.get_type()==Event::node_alive){ */
+  /* 	node_alive(evt,n); */
+  /*     } */
+  /*     else if(evt.get_type()==Event::get_pred){ // this should make stabilization fault tolerant */
+  /* 	// stabilize_timeout */
+  /* 	/\* struct msg message=evt.get_message(); *\/ */
+  /* 	/\* message.to=message.from; *\/ */
+  /* 	/\* message.from=n->id; *\/ */
+  /* 	/\* Event evt2(Event::stabilize_timeout, Clock+TIMEOUT,message.to,message); *\/ */
+  /* 	/\* FutureEventList.push(evt2); *\/ */
+  /*     } */
+  /*     else if(evt.get_type()==Event::lookup){	// this should make lookups fault tolerant */
+  /*     	// lookup_timeout ..but what if the destination of lookup_timeout is also dead..do we need to store the entire */
+  /*     	// path of the lookup or what ? */
+  /*     	// lets schedule a lookup_timeout */
+  /*     	// we need to have a list of failed nodes in the path as well, to avoid them while backtracking */
+  /*     	/\* struct msg message=evt.get_message(); *\/ */
+  /*     	/\* message.failed_nodes.insert(message.to); *\/ */
+  /*     	/\* if(!message.path.empty()){ *\/ */
+  /*     	/\*   message.to=message.path.top(); *\/ */
+  /*     	/\*   message.path.pop(); *\/ */
+  /*     	/\*   Event evt2(Event::lookup,Clock+TIMEOUT,message.to,message); *\/ */
+  /*     	/\*   FutureEventList.push(evt2); *\/ */
+  /* 	cout<<"LOOKUP CALLED!!\n"; */
+  /*     } */
+  /*     else if(evt.get_type()==Event::secure_lookup){ */
+  /* 	secureLookup(evt,n); */
+  /*     } */
+  /*   } */
+  /*   else if(evt.get_type()==Event::lookup){ */
+  /*     /\* lookup(evt,n); *\/ */
+  /*     cout<<"LOOKUP CALLED!!\n"; */
+  /*   } */
+  /*   else if(evt.get_type()==Event::secure_lookup){ */
+  /*     secureLookup(evt,n); */
+  /*   } */
+  /*   else if(evt.get_type()==Event::lookup_reply){ */
+  /*     /\* lookup_reply(evt,n); *\/ */
+  /*     cout<<"LOOKUP REPLY CALLED!!\n"; */
+  /*   } */
+  /*   else if(evt.get_type()==Event::secure_lookupReply){ */
+  /*     secureLookupReply(evt,n); */
+  /*   } */
+  /*   else if(evt.get_type()==Event::ping){ */
+  /*     ping(evt,n); */
+  /*   } */
+  /*   else if(evt.get_type()==Event::ping_reply){ */
+  /*     ping_reply(evt,n); */
+  /*   } */
+  /*   else if(evt.get_type()==Event::get_pred){ */
+  /*     get_pred(evt,n); */
+  /*   } */
+  /*   else if(evt.get_type()==Event::stabilize_reply){ */
+  /*     stabilize_reply(evt,n); */
+  /*   } */
+  /*   else if(evt.get_type()==Event::stabilize_timeout){ */
+  /*     stabilize_timeout(evt,n); */
+  /*   }		 */
+  /*   else if(evt.get_type()==Event::fix_fingers){ */
+  /*     fix_fingers(evt,n); */
+  /*   } */
+  /*   else if(evt.get_type()==Event::notify){ */
+  /*     notify(evt,n); */
+  /*   } */
+  /*   else if(evt.get_type()==Event::check_predecessor){ */
+  /*     check_predecessor(evt,n); */
+  /*   } */
+  /*   else if(evt.get_type()==Event::ping_timeout){ */
+  /*     ping_timeout(evt,n); */
+  /*   } */
+  /*   else if(evt.get_type()==Event::node_dead){ */
+  /*     node_dead(evt,n); */
+  /*   } */
+  /*   else if(evt.get_type()==Event::sign_state){ */
+  /*     sign_state(evt,n); */
+  /*   } */
+  /*   else if(evt.get_type()==Event::recv_sign){ */
+  /*     recv_sign(evt,n); */
+  /*   } */
+  /*   else if(evt.get_type()==Event::initiate_path){ */
+  /*     initiate_path(evt,n); */
+  /*   } */
+  /*   else if(evt.get_type()==Event::extend_path){ */
+  /*     extend_path(evt,n); */
+  /*   } */
+  /*   else if(evt.get_type()==Event::authenticateReply){ */
+  /*     authenticateReply(evt, n); */
+  /*   } */
+  /*   else if(evt.get_type()==Event::authenticateRequest){ */
+  /*     authenticateRequest(evt, n); */
+  /*   } */
+  /*   else if(evt.get_type()==Event::getSuccAndPredRequest){ */
+  /*     getSuccAndPredRequest(evt, n); */
+  /*   } */
+  /*   else if(evt.get_type()==Event::getSuccAndPredReply){ */
+  /*     getSuccAndPredReply(evt, n); */
+  /*   } */
+  /*   if(!DISABLE_STABILIZE) */
+  /*     { */
+  /* 	if(evt.get_type()==Event::stabilizeSuccessorListRequest){ */
+  /* 	  stabilizeSuccessorListRequest(evt, n); */
+  /* 	} */
+  /* 	else if(evt.get_type()==Event::stabilizeSuccessorList){ */
+  /* 	  stabilizeSuccessorList(evt, n); */
+  /* 	} */
+  /* 	else if(evt.get_type()==Event::stabilizeSuccessorListAuthenticate){ */
+  /* 	  stabilizeSuccessorListAuthenticate(evt, n); */
+  /* 	} */
+  /*     } */
+  /* } */
 
-  for(int i=0;i<7;i++){
-    cout << prob_unreliability[i]/path_count << " ";
-  }
-  cout << endl << endl; 
+  /* for(int i=0;i<7;i++){ */
+  /*   cout << prob_unreliability[i]/path_count << " "; */
+  /* } */
+  /* cout << endl << endl;  */
 
-  verifySuccessorListCorrectness();
+  /* verifySuccessorListCorrectness(); */
   /* cout << endl << endl;  */
   /* // at the end of everything, lets check if most lookups succeed */
   /* int k=0; */
@@ -452,14 +452,15 @@ int main(int argc, char *argv[]){
 
   /*   } */
   /* } */
-  cout << "Number of nodes alive = " << idlist_alive.size() << endl;
-  cout << endl << endl; 
-  // do we ever get here?
+  /* cout << "Number of nodes alive = " << idlist_alive.size() << endl; */
+  /* cout << endl << endl;  */
+
   while(!FutureEventList.empty()){
     FutureEventList.pop();
   }
 
-  for(int i=0;i<10000;i++){		// code to measure average lookup path length
+  int number_of_lookups = 10000;
+  for(int i=0;i<number_of_lookups;i++){		// code to measure average lookup path length
     int random=rand()%num_nodes;
     while(allnodes[random].alive==false){
       random=rand()%num_nodes;
@@ -478,7 +479,7 @@ int main(int argc, char *argv[]){
   // repeat for different % of malicious nodes f
   int f;
   cout<<"num nodes = "<<num_nodes<<" rLookup = "<<rLookup<<endl;
-  for(f=0; f<=25; f+=1)
+  for(f=0; f<=30; f+=1)
     {
       // reset counters
       priority_queue<Event> tempFutureEventList;
@@ -544,20 +545,20 @@ int main(int argc, char *argv[]){
 	  tempFutureEventList.pop();
 	  FutureEventList.push(evt);
 	}
-      successMap[f] = num_new_lookup/100.0;
+      successMap[f] = (num_new_lookup/number_of_lookups)*100;
     }
 
   /* cout << "Final time is " << Clock << endl; */
 
   cout<<"Final data"<<endl;
 
-  for(f=0; f<=25; f+=1)
+  for(f=0; f<=30; f+=1)
     cout<<"f="<<f<<"  "<<successMap[f]<<"% success"<<endl;
   cout<<endl<<endl;
   cout<<"plot data"<<endl<<endl;
 
-  for(f=0; f<=25; f+=1)
-    cout<<successMap[f]<<endl;
+  for(f=0; f<=30; f+=1)
+    cout<<100.0-successMap[f]<<endl;
   cout<<endl;
 
   return 0;
@@ -1705,13 +1706,26 @@ void secureLookupRequest(Event evt, struct node *n)
     FutureEventList.push(evt2);
     return;
   }
+
   unsigned int next_hop=me;
-  for(int i=0;i<3*m;i++){	// avoid failed nodes
-    if(simCanon_NodeId_Closer(next_hop,n->fingertable[i],message.value)==n->fingertable[i] && 
+
+
+  next_hop = n->fingertable[0]; // my successor
+
+  for(int i=(2*m);i<3*m;i++){	// avoid failed nodes
+    if(simCanon_NodeId_Closer(next_hop,n->fingertable[i],message.value)==n->fingertable[i] &&
        message.failed_nodes.find(n->fingertable[i])==message.failed_nodes.end()){
       next_hop=n->fingertable[i];
     }
   }
+
+  /* for(int i=0;i<3*m;i++){	// avoid failed nodes */
+  /*   if(simCanon_NodeId_Closer(next_hop,n->fingertable[i],message.value)==n->fingertable[i] && */
+  /*      message.failed_nodes.find(n->fingertable[i])==message.failed_nodes.end()){ */
+  /*     next_hop=n->fingertable[i]; */
+  /*   } */
+  /* } */
+
   // could not find it in my fingertable, so lets propogate the lookup to the next hop in my Chord lookup protocol
   if(next_hop!=me){
     message.to=next_hop;
