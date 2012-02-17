@@ -22,7 +22,8 @@ using namespace std;
 
 #define DEBUG 1
 #define CREATE_RANDOMNESS 0
-#define SINGLE_SUCCESSOR_IN_LIST 1
+#define SINGLE_SUCCESSOR_IN_LIST 0
+#define ENABLE_DHT_LEVEL_ATTACK 1
 
 long int MAXID = 1048576;
 const int m=20;	// log MAXID /log 2
@@ -152,6 +153,7 @@ struct node{
 
 
 struct node *allnodes;
+set<unsigned int> maliciousNodeList;
 unsigned int *allnodesIds;
 
 int num_nodes,check_predecessor_timer, stabilize_timer,fix_fingers_timer, guard_timer, simulation_time,mean_alive, sign_timer, path_timer;
@@ -206,7 +208,9 @@ int verifySuccessorListCorrectness(struct node* n, int pos);
 void secureLookup(Event evt, struct node *n);
 void secureLookupRequest(Event evt, struct node *n);
 void secureLookupReply(Event evt, struct node *n);
-
+// DHT level attacks
+unsigned int findClosestMaliciousNodeInLookup(unsigned int lookupId, unsigned int me);
+void testDHTattack();
 
 double prob_unreliability[7];
 double path_count=0;
@@ -459,6 +463,11 @@ int main(int argc, char *argv[]){
     FutureEventList.pop();
   }
 
+  // test malicious dht lookup code
+  /* testDHTattack(); */
+  /* exit(0); */
+
+
   int number_of_lookups = 10000;
   for(int i=0;i<number_of_lookups;i++){		// code to measure average lookup path length
     int random=rand()%num_nodes;
@@ -503,6 +512,7 @@ int main(int argc, char *argv[]){
 	    {
 	      allnodes[random].iAmMalicious = 1;
 	      count_malicious_nodes++;
+	      maliciousNodeList.insert(allnodes[random].id);
 	    }
 	}
 
@@ -1676,10 +1686,29 @@ void secureLookup(Event evt, struct node *n)
 
 void secureLookupRequest(Event evt, struct node *n)
 {
-	
+
   unsigned int me=n->id;
   assert(me==evt.get_id());
   struct msg message=evt.get_message();
+
+  // I am a malicious node. Return closest malicious node to requested lookup id	
+  if(n->iAmMalicious && ENABLE_DHT_LEVEL_ATTACK)
+    {
+      unsigned int maliciousNodeId = findClosestMaliciousNodeInLookup(message.value, me);
+      message.to=message.origin;
+      message.from=me;
+      node* maliciousNode = &allnodes[map[maliciousNodeId]];
+
+      message.value2=maliciousNode->fingertable[0];
+      message.value3=maliciousNode->fingertable[1];
+      message.value4=maliciousNode->fingertable[2];
+      Event evt2(Event::secure_lookupReply,Clock+1,message.to,message);
+      FutureEventList.push(evt2);
+      return;
+    }
+
+
+  // I am an honest node
 	
   message.path.push(me);
 	
@@ -1726,6 +1755,7 @@ void secureLookupRequest(Event evt, struct node *n)
     }
   else
     {
+      // use entire successor list
       for(int i=0;i<3*m;i++){	// avoid failed nodes
 	if(simCanon_NodeId_Closer(next_hop,n->fingertable[i],message.value)==n->fingertable[i] &&
 	   message.failed_nodes.find(n->fingertable[i])==message.failed_nodes.end()){
@@ -1778,4 +1808,119 @@ void secureLookupReply(Event evt, struct node *n)
     }
   }
 
+}
+
+/**
+ * Used by a malicious node to return a malcious node closest to the id being looked up by a node.
+ * This will result in a DHT level attack.
+ * @return
+ */
+unsigned int findClosestMaliciousNodeInLookup(unsigned int lookupId, unsigned int me)
+{
+  // find the closest malicious node to the lookup Id requested.
+  set<unsigned int>::iterator it;
+  unsigned int closestMaliciousNode = *(maliciousNodeList.begin());
+
+  if( lookupId < *(maliciousNodeList.begin()) )
+    {
+      set<unsigned int>::iterator i = maliciousNodeList.end();
+      --i;
+      closestMaliciousNode = *(i);
+    }
+  else
+    {
+      for ( it=maliciousNodeList.begin() ; it != maliciousNodeList.end(); it++ )
+	{
+	  if(*it > closestMaliciousNode && *it < lookupId)
+	    {
+	      closestMaliciousNode = *it;
+	    }
+	}
+    }
+
+  return closestMaliciousNode;
+}
+
+
+/*****************************
+ * testing DHT level attacks *
+ *****************************/
+
+void printNodes();
+void performMaliciousLookups();
+
+void testDHTattack()
+{
+  int f = 10;
+
+  // make all nodes good
+  for(int i=0; i<num_nodes; i++)
+    {
+      allnodes[i].iAmMalicious = 0;
+      allnodes[i].alreadyLookedUpList.clear();
+    }
+  // make %f nodes malicious
+  int num_malicious_nodes = (f*num_nodes)/100;
+  int count_malicious_nodes = 0;
+  int random;
+  while(count_malicious_nodes < num_malicious_nodes)
+    {
+      random=rand()%num_nodes;
+      if(allnodes[random].iAmMalicious != 1)
+	{
+	  allnodes[random].iAmMalicious = 1;
+	  count_malicious_nodes++;
+	  maliciousNodeList.insert(allnodes[random].id);
+	}
+    }
+
+  // print nodes
+  printNodes();
+  // perform malicious lookups
+  performMaliciousLookups();
+}
+
+void performMaliciousLookups()
+{
+  int number_of_lookups = 10;
+
+  for(int i=0;i<number_of_lookups;i++){	
+    int random=rand()%num_nodes;
+    while(allnodes[random].alive==false){
+      random=rand()%num_nodes;
+    }
+    int from = allnodes[random].id;
+    int lookupId= rand()%MAXID;
+    int idReturned = findClosestMaliciousNodeInLookup(lookupId, from);
+
+    cout<<"\n";
+    cout<<"Id requested "<<lookupId;
+    cout<<" By "<<from;
+    cout<<" id returned "<<idReturned;
+  }
+  
+}
+
+
+void printNodes()
+{
+  set<unsigned int> nodeSet;
+  unordered_map<unsigned int, int> node_M;
+
+  for(int i=0;i<num_nodes;i++)
+    {
+      nodeSet.insert(allnodes[i].id);
+      node_M[allnodes[i].id] = allnodes[i].iAmMalicious;
+    }
+
+  set<unsigned int>::iterator iter;
+
+  cout<<"\nNode status\n\n";
+  for(iter = nodeSet.begin(); iter!=nodeSet.end(); iter++)
+    {
+      cout<<"  "<<*iter;
+      if(node_M[*iter])
+	cout<<"  M";
+      cout<<"\n";
+    }
 }
