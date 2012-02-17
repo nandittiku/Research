@@ -22,7 +22,7 @@ using namespace std;
 
 #define DEBUG 1
 #define CREATE_RANDOMNESS 0
-
+#define SINGLE_SUCCESSOR_IN_LIST 1
 
 long int MAXID = 1048576;
 const int m=20;	// log MAXID /log 2
@@ -1710,21 +1710,29 @@ void secureLookupRequest(Event evt, struct node *n)
   unsigned int next_hop=me;
 
 
-  next_hop = n->fingertable[0]; // my successor
+  if (SINGLE_SUCCESSOR_IN_LIST)
+    {
+      if(simCanon_NodeId_Closer(next_hop,n->fingertable[0],message.value)==n->fingertable[0] &&
+	 message.failed_nodes.find(n->fingertable[0])==message.failed_nodes.end()){
+	next_hop=n->fingertable[0];
+      }
 
-  for(int i=(2*m);i<3*m;i++){	// avoid failed nodes
-    if(simCanon_NodeId_Closer(next_hop,n->fingertable[i],message.value)==n->fingertable[i] &&
-       message.failed_nodes.find(n->fingertable[i])==message.failed_nodes.end()){
-      next_hop=n->fingertable[i];
+      for(int i=(2*m);i<3*m;i++){	// avoid failed nodes
+	if(simCanon_NodeId_Closer(next_hop,n->fingertable[i],message.value)==n->fingertable[i] &&
+	   message.failed_nodes.find(n->fingertable[i])==message.failed_nodes.end()){
+	  next_hop=n->fingertable[i];
+	}
+      }
     }
-  }
-
-  /* for(int i=0;i<3*m;i++){	// avoid failed nodes */
-  /*   if(simCanon_NodeId_Closer(next_hop,n->fingertable[i],message.value)==n->fingertable[i] && */
-  /*      message.failed_nodes.find(n->fingertable[i])==message.failed_nodes.end()){ */
-  /*     next_hop=n->fingertable[i]; */
-  /*   } */
-  /* } */
+  else
+    {
+      for(int i=0;i<3*m;i++){	// avoid failed nodes
+	if(simCanon_NodeId_Closer(next_hop,n->fingertable[i],message.value)==n->fingertable[i] &&
+	   message.failed_nodes.find(n->fingertable[i])==message.failed_nodes.end()){
+	  next_hop=n->fingertable[i];
+	}
+      }
+    }
 
   // could not find it in my fingertable, so lets propogate the lookup to the next hop in my Chord lookup protocol
   if(next_hop!=me){
