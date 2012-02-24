@@ -22,8 +22,8 @@ using namespace std;
 
 #define DEBUG 1
 #define CREATE_RANDOMNESS 0
-#define SINGLE_SUCCESSOR_IN_LIST 0
-#define ENABLE_DHT_LEVEL_ATTACK 1
+int SINGLE_SUCCESSOR_IN_LIST = 1;
+int ENABLE_DHT_LEVEL_ATTACK = 1;
 
 long int MAXID = 1048576;
 const int m=20;	// log MAXID /log 2
@@ -32,6 +32,7 @@ const int m=20;	// log MAXID /log 2
 const int TIMEOUT=2;	// 1 second timeout...is this OK? 
 const int rDHT = 2*m;
 int rLookup = 1;
+int fixingFingersMode = 0;
 
 // i have decided to go for a priority queue based simulation; the caveat is that code cant be directly implemented;
 // on the other hand, simulation is easier and i'm more familiar with this model
@@ -69,8 +70,10 @@ struct msg{
   set<unsigned int> failed_nodes;	// failed nodes that are encountered
   unsigned int fingertable_succ1[3*m];
   unsigned int fingertable_succ2[3*m];
-
+  int lookuptype;
 };
+
+enum LOOKUP_TYPE{ME, SUCC1, SUCC2};
 
 class Event{
 	
@@ -209,8 +212,16 @@ void secureLookup(Event evt, struct node *n);
 void secureLookupRequest(Event evt, struct node *n);
 void secureLookupReply(Event evt, struct node *n);
 // DHT level attacks
+void performDHTLevelAttack();
 unsigned int findClosestMaliciousNodeInLookup(unsigned int lookupId, unsigned int me);
 void testDHTattack();
+void runFixFingersSimulation();
+void findNumberOfMaliciousNodesInFingerTables();
+void printFingerTable();
+void checkFingers();
+void runFixFingersSimulationPart();
+void printNodes();
+void performMaliciousLookups();
 
 double prob_unreliability[7];
 double path_count=0;
@@ -230,8 +241,8 @@ int main(int argc, char *argv[]){
 
   // note that m should be close to log n, since the size of succ list should be 2*log n
   assert(pow(2,m)==MAXID);
-  if(argc!=11){
-    cout << "Usage: ./a.out num_nodes check_predecessor_timer stabilize_timer fix_fingers_timer sign_timer path_timer mean_alive simulation_time random_seed rLookup" << endl;
+  if(argc!=13){
+    cout << "Usage: ./a.out num_nodes check_predecessor_timer stabilize_timer fix_fingers_timer sign_timer path_timer mean_alive simulation_time random_seed rLookup SINGLE_SUCCESSOR_IN_LIST ENABLE_DHT_LEVEL_ATTACK" << endl;
     exit(1);
   }
   num_nodes=atoi(argv[1]);
@@ -245,6 +256,8 @@ int main(int argc, char *argv[]){
   simulation_time=atoi(argv[8]);
   srand(atoi(argv[9]));
   rLookup = atoi(argv[10]);
+  SINGLE_SUCCESSOR_IN_LIST = atoi(argv[11]);
+  ENABLE_DHT_LEVEL_ATTACK = atoi(argv[12]);
   mean_alive_rate=1.0/(double)mean_alive;
 	
 
@@ -263,6 +276,8 @@ int main(int argc, char *argv[]){
     state_init_oracle(&allnodes[i]);
     assert(allnodes[i].alive==true);
   }
+  performDHTLevelAttack();
+  exit(0);
 
   /* // Perform the actions in the events queue */
   /* while(!FutureEventList.empty() && Clock < simulation_time ){ */
@@ -462,14 +477,18 @@ int main(int argc, char *argv[]){
   while(!FutureEventList.empty()){
     FutureEventList.pop();
   }
-
+  /* runFixFingersSimulation(); */
+  /* while(!FutureEventList.empty()){ */
+  /*   FutureEventList.pop(); */
+  /* } */
   // test malicious dht lookup code
   /* testDHTattack(); */
   /* exit(0); */
 
-
+  priority_queue<Event> tempFutureEventList;
   int number_of_lookups = 10000;
-  for(int i=0;i<number_of_lookups;i++){		// code to measure average lookup path length
+  // create lookup requests
+  for(int i=0;i<number_of_lookups;i++){	
     int random=rand()%num_nodes;
     while(allnodes[random].alive==false){
       random=rand()%num_nodes;
@@ -479,8 +498,8 @@ int main(int argc, char *argv[]){
     message.to=message.from;
     message.value=rand()%MAXID;
     message.ttl=0;
-    Event evt(Event::secure_lookup,Clock,message.to,message);
-    FutureEventList.push(evt);
+    Event evt(Event::secure_lookup,Clock+2,message.to,message);
+    tempFutureEventList.push(evt);
   }
 
   cout<<endl<<endl;
@@ -488,10 +507,9 @@ int main(int argc, char *argv[]){
   // repeat for different % of malicious nodes f
   int f;
   cout<<"num nodes = "<<num_nodes<<" rLookup = "<<rLookup<<endl;
-  for(f=0; f<=30; f+=1)
+  for(f=20; f<=30; f+=1)
     {
       // reset counters
-      priority_queue<Event> tempFutureEventList;
       num_count=0;
       num_ttl=0;
       num_new_lookup=0;
@@ -516,6 +534,49 @@ int main(int argc, char *argv[]){
 	    }
 	}
 
+      findNumberOfMaliciousNodesInFingerTables();
+      if(ENABLE_DHT_LEVEL_ATTACK)
+	{
+	  cout<<"start\n";
+	  runFixFingersSimulation();
+	  while(!FutureEventList.empty()){
+	    FutureEventList.pop();
+	  }
+	  cout<<"again\n";
+	  runFixFingersSimulation();
+	  while(!FutureEventList.empty()){
+	    FutureEventList.pop();
+	  }
+	  cout<<"again\n";
+	  runFixFingersSimulation();
+	  while(!FutureEventList.empty()){
+	    FutureEventList.pop();
+	  }
+	  cout<<"again\n";
+	  runFixFingersSimulation();
+	  while(!FutureEventList.empty()){
+	    FutureEventList.pop();
+	  }
+	  cout<<"again\n";
+	  runFixFingersSimulation();
+	  while(!FutureEventList.empty()){
+	    FutureEventList.pop();
+	  }
+	  cout<<"done\n";
+	}
+      findNumberOfMaliciousNodesInFingerTables();
+
+
+      assert(FutureEventList.size()==0);
+      // copy into future eventlist
+      while(!tempFutureEventList.empty())
+	{
+	  Event evt = tempFutureEventList.top();
+	  tempFutureEventList.pop();
+	  FutureEventList.push(evt);
+	}
+      assert(FutureEventList.size()==(unsigned int)number_of_lookups);
+
       while(!FutureEventList.empty()){
 	Event evt=FutureEventList.top();
 	FutureEventList.pop();
@@ -529,33 +590,15 @@ int main(int argc, char *argv[]){
 	  secureLookup(evt,n);
 	}
 	else if(evt.get_type()==Event::secure_lookupRequest){
-	  // if n->id is malicious then drop packet
-	  if(n->iAmMalicious != 1)
-	    {
-	      secureLookupRequest(evt,n);
-	    }
+	  secureLookupRequest(evt,n);
 	}
 	else if(evt.get_type()==Event::secure_lookupReply){
 	  secureLookupReply(evt,n);
 	}
       }
 
-      cout << "f="<<f<<"% malicious nodes="<<num_malicious_nodes<<"/"<<num_nodes<<endl;
-      /* cout << "Total number of unique lookups requested is 10000" << endl; */
-      /* cout << "Total number of actual lookups requested is " << 10000*rLookup << endl; */
-      /* cout << "Total number of finished lookups is " << num_count << endl; */
-      /* cout << "Total number of actual finished lookups is " << num_new_lookup << endl; */
-      /* cout << "Probability of a successful lookup is " << num_new_lookup/10000.0 << endl; */
-      /* cout << endl; */
-
-      // copy into future eventlist
-      while(!tempFutureEventList.empty())
-	{
-	  Event evt = tempFutureEventList.top();
-	  tempFutureEventList.pop();
-	  FutureEventList.push(evt);
-	}
       successMap[f] = (num_new_lookup/number_of_lookups)*100;
+      cout << "f="<<f<<"% malicious nodes="<<num_malicious_nodes<<"/"<<num_nodes<<" success "<<successMap[f]<<endl;
     }
 
   /* cout << "Final time is " << Clock << endl; */
@@ -636,7 +679,6 @@ void state_init_oracle(struct node *n){
   }
   // lets maintain nodes to whom i give the shadow certifications
 
-	
   n->succ1.id=n->fingertable[0];
   n->succ2.id=n->fingertable[1];
   for(int i=2*m;i<3*m;i++){
@@ -833,13 +875,13 @@ void fix_fingers(Event evt, struct node *n){	// periodically refresh fingers
     }
     for(int j=0;j<2*m-3;j++){
       if(simCanon_NodeId_Closer(n->fingertable[j],n->fingerid[i],n->fingertable[j+1])==n->fingerid[i]){
-	n->fingertable[i]=n->fingertable[j+1];
-	n->fingertable_succ1[i]=n->fingertable[j+2];
-	n->fingertable_succ2[i]=n->fingertable[j+3];
-	break;
+  	n->fingertable[i]=n->fingertable[j+1];
+  	n->fingertable_succ1[i]=n->fingertable[j+2];
+  	n->fingertable_succ2[i]=n->fingertable[j+3];
+  	break;
       }
       if(j==2*m-2){
-	breakpoint=i;
+  	breakpoint=i;
       }
     }
   }
@@ -847,7 +889,7 @@ void fix_fingers(Event evt, struct node *n){	// periodically refresh fingers
   struct msg message;
   message.from=me;
   message.to=n->fingertable[n->next];			// use the lookup function already coded
-	
+
   n->next=(n->next+1)%(3*m);
   if(n->next<breakpoint){
     n->next=breakpoint;
@@ -856,75 +898,77 @@ void fix_fingers(Event evt, struct node *n){	// periodically refresh fingers
   message.value=n->fingerid[n->next];
   message.lookupId = n->next;
 
-
-  // send lookup msg to Rl nodes.	
+  // send lookup msg to Rl nodes.
   message.ttl=0;
-  message.path.push(me);	// always set ttl before issuing a lookup and add initiator to the path! 
+  message.path.push(me);	// always set ttl before issuing a lookup and add initiator to the path!
   Event evt2(Event::secure_lookup,Clock+1,message.to,message);
   FutureEventList.push(evt2);
 
 
   // lets fix one each of  my succ1 and succ2's fingers
 
-  breakpoint=3*m-1;
-  for(int i=2*m;i<3*m;i++){
-    for(int j=0;j<2*m-3;j++){
-      if(simCanon_NodeId_Closer(n->fingertable[j],n->succ1.fingerid[i],n->fingertable[j+1])==n->succ1.fingerid[i]){
-	n->succ1.fingertable[i]=n->fingertable[j+1];
-	n->succ1.fingertable_succ1[i]=n->fingertable[j+2];
-	n->succ1.fingertable_succ2[i]=n->fingertable[j+3];
-	break;
-      }
-      if(j==2*m-2){
-	breakpoint=i;
-      }
-    }
-  }
+  /* breakpoint=3*m-1; */
+  /* for(int i=2*m;i<3*m;i++){ */
+  /*   for(int j=0;j<2*m-3;j++){ */
+  /*     if(simCanon_NodeId_Closer(n->fingertable[j],n->succ1.fingerid[i],n->fingertable[j+1])==n->succ1.fingerid[i]){ */
+  /* 	n->succ1.fingertable[i]=n->fingertable[j+1]; */
+  /* 	n->succ1.fingertable_succ1[i]=n->fingertable[j+2]; */
+  /* 	n->succ1.fingertable_succ2[i]=n->fingertable[j+3]; */
+  /* 	break; */
+  /*     } */
+  /*     if(j==2*m-2){ */
+  /* 	breakpoint=i; */
+  /*     } */
+  /*   } */
+  /* } */
 
-  struct msg message2;
-  message2.from=me;
-  //message2.to=n->succ1.fingertable[n->succ1.next];
-  n->succ1.next=(n->succ1.next+1)%(3*m);
-  if(n->succ1.next < breakpoint){
-    n->succ1.next=breakpoint;
-    //message2.to=n->succ1.fingertable[breakpoint-1];
-  }
-  message2.value=n->succ1.fingerid[n->succ1.next];
-  message2.ttl=0;
-  message2.path.push(me);
-  message2.to=me;
-  Event evt3(Event::secure_lookup, Clock+1, message2.to,message2);
-  FutureEventList.push(evt3);
+  /* struct msg message2; */
+  /* message2.from=me; */
+  /* //message2.to=n->succ1.fingertable[n->succ1.next]; */
+  /* n->succ1.next=(n->succ1.next+1)%(3*m); */
+  /* if(n->succ1.next < breakpoint){ */
+  /*   n->succ1.next=breakpoint; */
+  /*   //message2.to=n->succ1.fingertable[breakpoint-1]; */
+  /* } */
+  /* message2.value=n->succ1.fingerid[n->succ1.next]; */
+  /* message2.ttl=0; */
+  /* message2.path.push(me); */
+  /* message2.to=me; */
+  /* message2.lookupId = n->succ1.next; */
+  /* message2.lookuptype = SUCC1; */
+  /* Event evt3(Event::secure_lookup, Clock+1, message2.to,message2); */
+  /* FutureEventList.push(evt3); */
 
-  breakpoint=3*m-1;
-  for(int i=2*m;i<3*m;i++){
-    for(int j=0;j<2*m-3;j++){
-      if(simCanon_NodeId_Closer(n->fingertable[j],n->succ2.fingerid[i],n->fingertable[j+1])==n->succ2.fingerid[i]){
-	n->succ2.fingertable[i]=n->fingertable[j+1];
-	n->succ2.fingertable_succ1[i]=n->fingertable[j+2];
-	n->succ2.fingertable_succ2[i]=n->fingertable[j+3];
-	break;
-      }
-      if(j==2*m-2){
-	breakpoint=i;
-      }
-    }
-  }
-  struct msg message3;
-  message3.from=me;
-  //message3.to=n->succ2.fingertable[n->succ2.next];
-  n->succ2.next=(n->succ2.next+1)%(3*m);
-  if(n->succ2.next < breakpoint){
-    n->succ2.next=breakpoint;
-    //message3.to=n->succ2.fingertable[breakpoint-1];
-  }
-  message3.value=n->succ2.fingerid[n->succ2.next];
-  message3.ttl=0;
-  message3.path.push(me);
-  message3.to=me;
-  Event evt4(Event::secure_lookup, Clock+1, message3.to,message3);
-  FutureEventList.push(evt4);
-
+  /* breakpoint=3*m-1; */
+  /* for(int i=2*m;i<3*m;i++){ */
+  /*   for(int j=0;j<2*m-3;j++){ */
+  /*     if(simCanon_NodeId_Closer(n->fingertable[j],n->succ2.fingerid[i],n->fingertable[j+1])==n->succ2.fingerid[i]){ */
+  /* 	n->succ2.fingertable[i]=n->fingertable[j+1]; */
+  /* 	n->succ2.fingertable_succ1[i]=n->fingertable[j+2]; */
+  /* 	n->succ2.fingertable_succ2[i]=n->fingertable[j+3]; */
+  /* 	break; */
+  /*     } */
+  /*     if(j==2*m-2){ */
+  /* 	breakpoint=i; */
+  /*     } */
+  /*   } */
+  /* } */
+  /* struct msg message3; */
+  /* message3.from=me; */
+  /* //message3.to=n->succ2.fingertable[n->succ2.next]; */
+  /* n->succ2.next=(n->succ2.next+1)%(3*m); */
+  /* if(n->succ2.next < breakpoint){ */
+  /*   n->succ2.next=breakpoint; */
+  /*   //message3.to=n->succ2.fingertable[breakpoint-1]; */
+  /* } */
+  /* message3.value=n->succ2.fingerid[n->succ2.next]; */
+  /* message3.ttl=0; */
+  /* message3.path.push(me); */
+  /* message3.to=me; */
+  /* message3.lookupId = n->succ2.next; */
+  /* message3.lookuptype = SUCC2; */
+  /* Event evt4(Event::secure_lookup, Clock+1, message3.to,message3); */
+  /* FutureEventList.push(evt4); */
 
   // lets schedule fix_fingers again
   struct msg message5;
@@ -933,6 +977,7 @@ void fix_fingers(Event evt, struct node *n){	// periodically refresh fingers
   Event evt5(Event::fix_fingers,Clock+fix_fingers_timer,message5.to,message5);	// earlier process should be over after 1000 time
   FutureEventList.push(evt5);
 }
+
 // what are we doing here? We do not seem to be doing anything important.
 void  ping_reply(Event evt, struct node *n){
   unsigned int me=n->id;
@@ -1678,7 +1723,13 @@ void secureLookup(Event evt, struct node *n)
   for ( it = randomNodes.begin() ; it != randomNodes.end(); it++ )
     {
       message.to = n->fingertable[*it];
-      Event evt2(Event::secure_lookupRequest,Clock+1,message.to,message);
+      /* if(n->id == 441325) */
+      /* 	{ */
+      /* 	  printFingerTable(); */
+      /* 	  cout<<"message to "<<message.to<<" for "<<message.value<<endl; */
+      /* 	  exit(0); */
+      /* 	} */
+      Event evt2( Event::secure_lookupRequest,Clock+1,message.to,message);
       FutureEventList.push(evt2);
     }
 
@@ -1691,25 +1742,7 @@ void secureLookupRequest(Event evt, struct node *n)
   assert(me==evt.get_id());
   struct msg message=evt.get_message();
 
-  // I am a malicious node. Return closest malicious node to requested lookup id	
-  if(n->iAmMalicious && ENABLE_DHT_LEVEL_ATTACK)
-    {
-      unsigned int maliciousNodeId = findClosestMaliciousNodeInLookup(message.value, me);
-      message.to=message.origin;
-      message.from=me;
-      node* maliciousNode = &allnodes[map[maliciousNodeId]];
-
-      message.value2=maliciousNode->fingertable[0];
-      message.value3=maliciousNode->fingertable[1];
-      message.value4=maliciousNode->fingertable[2];
-      Event evt2(Event::secure_lookupReply,Clock+1,message.to,message);
-      FutureEventList.push(evt2);
-      return;
-    }
-
-
   // I am an honest node
-	
   message.path.push(me);
 	
   // if looking for myself, i can just set up a lookup reply with my data.
@@ -1724,6 +1757,30 @@ void secureLookupRequest(Event evt, struct node *n)
     return;
 
   }
+
+  // I am a malicious node. Return closest malicious node to requested lookup id	
+  if(n->iAmMalicious /*&& ENABLE_DHT_LEVEL_ATTACK && fixingFingersMode*/)
+    {
+      unsigned int maliciousNodeId = findClosestMaliciousNodeInLookup(message.value, me);
+           /* cout<<"looking for "<<message.value<<" returning "<<maliciousNodeId<<" i am "<<me<<endl; */
+      message.to=message.origin;
+      message.from=me;
+      node* maliciousNode = &allnodes[map[maliciousNodeId]];
+
+      message.value2=maliciousNodeId;
+      message.value3=maliciousNode->fingertable[1];
+      message.value4=maliciousNode->fingertable[2];
+      Event evt2(Event::secure_lookupReply,Clock+1,message.to,message);
+      FutureEventList.push(evt2);
+      return;
+    } /*else if (n->iAmMalicious && !fixingFingersMode) // application level attack 
+    {
+      // drop packet
+      return;
+    }
+      */
+
+
   // else find id closest to the id you are looking for in my fingertable data.
   if(simCanon_NodeId_Closer(me,message.value,n->fingertable[0])==message.value){
     message.to=message.origin;
@@ -1731,6 +1788,7 @@ void secureLookupRequest(Event evt, struct node *n)
     message.value2=n->fingertable[0];
     message.value3=n->fingertable[1];
     message.value4=n->fingertable[2];
+
     Event evt2(Event::secure_lookupReply,Clock+1,message.to,message);
     FutureEventList.push(evt2);
     return;
@@ -1788,23 +1846,25 @@ void secureLookupReply(Event evt, struct node *n)
   // add to the lookup request
   struct msg message=evt.get_message();
 
-  if(n->alreadyLookedUpList.find(message.value) == n->alreadyLookedUpList.end())
+  if (!fixingFingersMode)
     {
-      // new lookup
-      n->alreadyLookedUpList.insert(message.value);
-      num_new_lookup++;
+      if(n->alreadyLookedUpList.find(message.value) == n->alreadyLookedUpList.end())
+	{
+	  // new lookup
+	  n->alreadyLookedUpList.insert(message.value);
+	  num_new_lookup++;
+	}
+      num_count++;
     }
-  num_count++;
 
   for(int i=2*m;i<3*m;i++){
     if(i==message.lookupId){
-      // check if message.value2 is closer than current data in fingertable at i compared to message.value
-      if( message.value - n->fingertable[i] > message.value - message.value2 )
-  	{
-  	  n->fingertable[i]=message.value2;
-  	  n->fingertable_succ1[i]=message.value3;
-  	  n->fingertable_succ2[i]=message.value4;
-  	}
+      if( n->fingertable[i] - message.value > message.value2 - message.value )
+	{
+	  n->fingertable[i]=message.value2;
+	  n->fingertable_succ1[i]=message.value3;
+	  n->fingertable_succ2[i]=message.value4;
+	}
     }
   }
 
@@ -1817,28 +1877,35 @@ void secureLookupReply(Event evt, struct node *n)
  */
 unsigned int findClosestMaliciousNodeInLookup(unsigned int lookupId, unsigned int me)
 {
-  // find the closest malicious node to the lookup Id requested.
-  set<unsigned int>::iterator it;
-  unsigned int closestMaliciousNode = *(maliciousNodeList.begin());
+  /* // find the closest malicious node to the lookup Id requested. */
+  /* set<unsigned int>::iterator it; */
+  /* unsigned int closestMaliciousNode = *(maliciousNodeList.begin()); */
 
-  if( lookupId < *(maliciousNodeList.begin()) )
-    {
-      set<unsigned int>::iterator i = maliciousNodeList.end();
-      --i;
-      closestMaliciousNode = *(i);
-    }
-  else
-    {
-      for ( it=maliciousNodeList.begin() ; it != maliciousNodeList.end(); it++ )
-	{
-	  if(*it > closestMaliciousNode && *it < lookupId)
-	    {
-	      closestMaliciousNode = *it;
-	    }
-	}
-    }
-
-  return closestMaliciousNode;
+  /* if( lookupId < *(maliciousNodeList.begin()) ) */
+  /*   { */
+  /*     set<unsigned int>::iterator i = maliciousNodeList.end(); */
+  /*     --i; */
+  /*     closestMaliciousNode = *(i); */
+  /*   } */
+  /* else */
+  /*   { */
+  /*     for ( it=maliciousNodeList.begin() ; it != maliciousNodeList.end(); it++ ) */
+  /* 	{ */
+  /* 	  if(*it > closestMaliciousNode && *it < lookupId) */
+  /* 	    { */
+  /* 	      closestMaliciousNode = *it; */
+  /* 	    } */
+  /* 	} */
+  /*   } */
+  
+  int tempId = lookupId;
+  int id;
+  do{
+    id = succ(tempId);
+    tempId = id + 1;
+  }while(!allnodes[map[id]].iAmMalicious);
+  /* cout<<"looking for "<<lookupId<<" returning "<<id<<endl; */
+  return id;//closestMaliciousNode;
 }
 
 
@@ -1846,8 +1913,44 @@ unsigned int findClosestMaliciousNodeInLookup(unsigned int lookupId, unsigned in
  * testing DHT level attacks *
  *****************************/
 
-void printNodes();
-void performMaliciousLookups();
+void performDHTLevelAttack()
+{
+  int f = 20;
+
+  // make all nodes non-malicious
+  for(int i=0; i<num_nodes; i++)
+    {
+      allnodes[i].iAmMalicious = 0;
+      allnodes[i].alreadyLookedUpList.clear();
+    }
+  // make %f nodes malicious
+  int num_malicious_nodes = (f*num_nodes)/100;
+  int count_malicious_nodes = 0;
+  int random;
+
+  while(count_malicious_nodes < num_malicious_nodes)
+    {
+      random=rand()%num_nodes;
+      if(allnodes[random].iAmMalicious != 1)
+	{
+	  allnodes[random].iAmMalicious = 1;
+	  count_malicious_nodes++;
+	  maliciousNodeList.insert(allnodes[random].id);
+	}
+    }
+
+  Clock = 0;
+  for(int i=0; i<num_nodes; i++)
+    {
+      struct msg message;
+      message.from = allnodes[i].id;
+      message.to = message.from;
+      Event evt(Event::fix_fingers,Clock,message.to,message);
+      FutureEventList.push(evt);
+    }
+
+  runFixFingersSimulationPart();
+}
 
 void testDHTattack()
 {
@@ -1923,4 +2026,143 @@ void printNodes()
 	cout<<"  M";
       cout<<"\n";
     }
+}
+int highestMaliciousNodes = 0;
+void runFixFingersSimulationPart()
+{
+  fixingFingersMode = 1;
+  /* printNodes(); */
+  /* printFingerTable(); */
+  cout<<endl;
+  int tempClock = Clock;
+  findNumberOfMaliciousNodesInFingerTables();
+	printFingerTable();
+  while(1 /* originalClock+200 >= Clock */){
+
+    Event evt=FutureEventList.top();
+    FutureEventList.pop();
+
+    Clock=evt.get_time();
+    if(tempClock<Clock)
+      {
+	tempClock = Clock;
+	/* findNumberOfMaliciousNodesInFingerTables(); */
+	if(tempClock%1000==0){
+	  printFingerTable();
+	  findNumberOfMaliciousNodesInFingerTables();
+	  /* exit(0); */
+	}
+      }
+
+    struct node *n;
+    n=&allnodes[map[evt.get_id()]];
+    assert(evt.get_id()==n->id);
+    if(evt.get_type()==Event::secure_lookup){
+      secureLookup(evt,n);
+    }
+    else if(evt.get_type()==Event::secure_lookupRequest){
+      secureLookupRequest(evt,n);
+    }
+    else if(evt.get_type()==Event::secure_lookupReply){
+      secureLookupReply(evt,n);
+    }
+    else if(evt.get_type()==Event::fix_fingers){
+      fix_fingers(evt,n);
+    } 
+  }
+
+  /* printFingerTable(); */
+  fixingFingersMode = 0; 
+  /* exit(0); */
+
+  while(!FutureEventList.empty()){
+    FutureEventList.pop();
+  }
+}
+
+void runFixFingersSimulation()
+{
+  findNumberOfMaliciousNodesInFingerTables();
+  Clock = 0;
+  for(int i=0; i<num_nodes/2; i++)
+    {
+      struct msg message;
+      message.from = allnodes[i].id;
+      message.to = message.from;
+      Event evt(Event::fix_fingers,Clock,message.to,message);
+      FutureEventList.push(evt);
+    }
+  runFixFingersSimulationPart();
+  findNumberOfMaliciousNodesInFingerTables();
+  Clock = 0;
+  for(int i=num_nodes/2; i<num_nodes; i++)
+    {
+      struct msg message;
+      message.from = allnodes[i].id;
+      message.to = message.from;
+      Event evt(Event::fix_fingers,Clock,message.to,message);
+      FutureEventList.push(evt);
+    }
+  runFixFingersSimulationPart();
+  findNumberOfMaliciousNodesInFingerTables();
+}
+
+
+void findNumberOfMaliciousNodesInFingerTables()
+{
+  int count = 0;
+  for(int i=0; i<num_nodes; i++)
+    {
+      for(int j=2*m; j<3*m; j++)
+	{
+	  if ( allnodes[map[allnodes[i].fingertable[j]]].iAmMalicious )
+	    count++;
+	}
+
+    }
+  cout<</* "malicious fingers = "<< */count;
+
+   if(highestMaliciousNodes < count)
+     {
+       highestMaliciousNodes = count;
+       cout<<" *";
+     }
+   cout<<endl;
+}
+
+void printFingerTable()
+{
+  cout<<"finger table for"<<endl;
+    for(int i=0; i<num_nodes; i++)
+    {
+      cout<<"** "<<allnodes[i].id<<endl;
+      for(int j=2*m; j<3*m; j++)
+	{
+	  cout<<(int)pow(2,j-2*m)+allnodes[i].id<<" => "<<allnodes[i].fingertable[j];
+	  if ( allnodes[map[allnodes[i].fingertable[j]]].iAmMalicious )
+	    cout<<" M";
+	  cout<<endl;
+	}
+      break;
+    }
+}
+
+void checkFingers()
+{
+  cout<<"Fingers"<<endl;
+  printNodes();
+
+  for(int i=0; i<num_nodes; i++)
+    {
+      cout<<"** "<<allnodes[i].id<<endl;
+      for(int j=2*m; j<3*m; j++)
+	{
+	  cout<<(int)pow(2,j-2*m)+allnodes[i].id<<" => "<<allnodes[i].fingertable[j];
+	  if ( allnodes[map[allnodes[i].fingertable[j]]].iAmMalicious )
+	    cout<<" M";
+	  cout<<endl;
+	}
+      break;
+    }
+
 }
