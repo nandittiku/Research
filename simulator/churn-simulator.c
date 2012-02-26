@@ -222,6 +222,7 @@ void checkFingers();
 void runFixFingersSimulationPart();
 void printNodes();
 void performMaliciousLookups();
+void printFingerTable(unsigned int nodeId);
 
 double prob_unreliability[7];
 double path_count=0;
@@ -640,6 +641,7 @@ void init(struct node *n){
     (*n).fingerid[i]=n->id;
     (*n).predList[i]=n->id;
   }
+
   for(int i=2*m;i<3*m;i++){
     (*n).fingerid[i]=((*n).id+(unsigned int)pow(2,i-2*m))%MAXID;
   }
@@ -887,23 +889,36 @@ void fix_fingers(Event evt, struct node *n){	// periodically refresh fingers
   }
 
   struct msg message;
-  message.from=me;
-  message.to=n->fingertable[n->next];			// use the lookup function already coded
+  //  message.to = n->fingertable[n->next];			// use the lookup function already coded
 
   n->next=(n->next+1)%(3*m);
-  if(n->next<breakpoint){
-    n->next=breakpoint;
-    message.to=n->fingertable[breakpoint-1];
-  }
+  /* if(n->next<breakpoint){ */
+  /*   n->next=breakpoint; */
+  /*   message.to=n->fingertable[breakpoint-1]; */
+  /* } */
   message.value=n->fingerid[n->next];
   message.lookupId = n->next;
+  message.to = me;
+  /* if(n->id == 342391) */
+  /*   { */
+  /*     cout<<" message.value = "<<message.value<<" fingerid = "<<n->fingerid[message.lookupId]<<" n->id = "<<n->id<<endl; */
+  /*     printFingerTable(); */
+  /*     exit(0); */
+  /*   } */
 
   // send lookup msg to Rl nodes.
   message.ttl=0;
   message.path.push(me);	// always set ttl before issuing a lookup and add initiator to the path!
-  Event evt2(Event::secure_lookup,Clock+1,message.to,message);
+  message.from = message.to;
+  assert(message.to == message.from);
+  assert(message.value == n->fingerid[n->next]);
+  Event evt2(Event::secure_lookup,Clock,message.to,message);
   FutureEventList.push(evt2);
 
+  if(n->id == 342391)
+    {
+      //      cout<<" to = "<<message.to<<" message.value = "<<message.value<<" fingerid = "<<n->fingerid[message.lookupId]<<" n->id = "<<n->id<<endl;
+    }
 
   // lets fix one each of  my succ1 and succ2's fingers
 
@@ -1701,6 +1716,8 @@ int verifySuccessorListCorrectness(struct node *n, int pos)
 /*******************
  *  Secure Lookup  *
  *******************/
+unsigned int lookingFor = 342391;
+
 
 void secureLookup(Event evt, struct node *n)
 {
@@ -1711,22 +1728,24 @@ void secureLookup(Event evt, struct node *n)
     {
       int nodeId = (2*m) + 1 + rand()%m;
       if(randomNodes.find(nodeId) == randomNodes.end())
-	{
-	  randomNodes.insert(nodeId);
-	}
+  	{
+  	  randomNodes.insert(nodeId);
+  	}
     }
 
   set<unsigned int>::iterator it;
   struct msg message=evt.get_message();
+  assert(message.from == n->id);
   message.origin = n->id;
 
   for ( it = randomNodes.begin() ; it != randomNodes.end(); it++ )
     {
       message.to = n->fingertable[*it];
-      /* if(n->id == 441325) */
+      /* if(n->id == 342391) */
       /* 	{ */
       /* 	  printFingerTable(); */
-      /* 	  cout<<"message to "<<message.to<<" for "<<message.value<<endl; */
+      /* 	  cout<<"message to "<<message.to<<" message.value "<<message.value<<"  fingerid = "<<n->fingerid[message.lookupId]; */
+      /* 	  cout<<" from = "<<message.origin<<endl; */
       /* 	  exit(0); */
       /* 	} */
       Event evt2( Event::secure_lookupRequest,Clock+1,message.to,message);
@@ -1741,7 +1760,7 @@ void secureLookupRequest(Event evt, struct node *n)
   unsigned int me=n->id;
   assert(me==evt.get_id());
   struct msg message=evt.get_message();
-
+  message.from = me;
   // I am an honest node
   message.path.push(me);
 	
@@ -1858,12 +1877,27 @@ void secureLookupReply(Event evt, struct node *n)
     }
 
   for(int i=2*m;i<3*m;i++){
+
     if(i==message.lookupId){
       if( n->fingertable[i] - message.value > message.value2 - message.value )
 	{
+      	  int x = 0;
+      if( allnodes[map[n->fingertable[i]]].iAmMalicious && !allnodes[map[message.value2]].iAmMalicious)
+      	{
+      	printFingerTable(242405);
+      	cout<<"n->id = "<<n->id<<" fingertable[i] = "<<n->fingertable[i]<<" message.value = "<<message.value<<" message.from = "<<message.from<<" fingertable[i] = "<<n->fingertable[i]<<" message.value2 = "<<message.value2<<endl;
+      	cout<<"fingerid = "<<n->fingerid[i]<<" to = "<<message.to<<" origin = "<<message.origin<<endl;
+      	x = 1;
+      	}
 	  n->fingertable[i]=message.value2;
 	  n->fingertable_succ1[i]=message.value3;
 	  n->fingertable_succ2[i]=message.value4;
+      if(x)
+      	{
+      	  printFingerTable(242405);
+      	  exit(0);
+      	}
+
 	}
     }
   }
@@ -2128,6 +2162,26 @@ void findNumberOfMaliciousNodesInFingerTables()
        cout<<" *";
      }
    cout<<endl;
+}
+
+void printFingerTable(unsigned int nodeId)
+{
+  cout<<"finger table for"<<endl;
+    for(int i=0; i<num_nodes; i++)
+    {
+      if(allnodes[i].id == nodeId)
+	{
+	  cout<<"** "<<allnodes[i].id<<endl;
+	  for(int j=2*m; j<3*m; j++)
+	    {
+	      cout<<(int)pow(2,j-2*m)+allnodes[i].id<<" => "<<allnodes[i].fingertable[j];
+	      if ( allnodes[map[allnodes[i].fingertable[j]]].iAmMalicious )
+		cout<<" M";
+	      cout<<endl;
+	    }
+	  break;
+	}
+    }
 }
 
 void printFingerTable()
