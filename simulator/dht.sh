@@ -2,7 +2,7 @@
 num_nodes=30
 check_predecessor_timer=10
 let stabilize_timer=2
-fix_fingers_timer=2
+fix_fingers_timer=5
 sign_timer=2
 path_timer=10
 let mean_alive=3600
