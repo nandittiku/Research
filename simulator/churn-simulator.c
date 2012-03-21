@@ -1739,7 +1739,7 @@ void secureLookupRequest(Event evt, struct node *n)
     }
   else
     {
-      // use entire successor list
+      // use entire successor list and fingertable list
       for(int i=0;i<3*m;i++){	// avoid failed nodes
 	if(simCanon_NodeId_Closer(next_hop,n->fingertable[i],message.value)==n->fingertable[i] &&
 	   message.failed_nodes.find(n->fingertable[i])==message.failed_nodes.end()){
