@@ -1681,7 +1681,6 @@ void secureLookupRequest(Event evt, struct node *n)
     Event evt2(Event::secure_lookupReply,Clock+1,message.to,message);
     FutureEventList.push(evt2);
     return;
-
   }
 
   // I am a malicious node. Return closest malicious node to requested lookup id	
@@ -1722,7 +1721,7 @@ void secureLookupRequest(Event evt, struct node *n)
 
   unsigned int next_hop=me;
 
-
+  // Check if the nodeID is in my successor list or my fingertable
   if (SINGLE_SUCCESSOR_IN_LIST)
     {
       if(simCanon_NodeId_Closer(next_hop,n->fingertable[0],message.value)==n->fingertable[0] &&
@@ -1777,6 +1776,7 @@ void secureLookupReply(Event evt, struct node *n)
 
   n->replyCount++;
 
+  // Should be timer her. But since no nodes die, I just look to make sure all the replies are received.
   if((unsigned int)n->replyCount==(unsigned int)rLookup)
     {
       secureLookupFixFinger(n, message.lookupId);
@@ -1796,7 +1796,7 @@ void secureLookupFixFinger(struct node *n, int lookupId)
   for ( it = n->fixFingersSet.begin() ; it != n->fixFingersSet.end(); it++ )
     {
 
-      if( (bestFinger - value >= *it - value) )
+      if( simCanon_NodeId_Closer(*it, n->fingertable[lookupId], value)==*it /* (bestFinger - value >= *it - value) */ )
 	{
 	  n->fingertable[lookupId]=*it;
 	  n->source[lookupId]=n->fixFingersSource[*it];
@@ -1928,7 +1928,7 @@ void runFixFingersSimulationPart()
 
     Clock=evt.get_time();
 
-    if(tempClock<Clock && (int)Clock%5 == 0)
+    if(tempClock<Clock && (int)Clock%2 == 0)
       {
 	tempClock = Clock;
 	/* printFingerTable(); */
