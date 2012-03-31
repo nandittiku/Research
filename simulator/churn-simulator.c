@@ -33,6 +33,7 @@ const int TIMEOUT=2;	// 1 second timeout...is this OK?
 const int rDHT = 2*m;  // for stabilizing successor and pred. list
 int rLookup = 1;     // for secure lookup
 int fixingFingersMode = 0;
+unsigned int biggestNode = 0;
 
 // i have decided to go for a priority queue based simulation; the caveat is that code cant be directly implemented;
 // on the other hand, simulation is easier and i'm more familiar with this model
@@ -155,11 +156,11 @@ struct node{
   int iAmMalicious; // am I a malicious node?
 
   // for DHT lookup
-  set<unsigned int> fixFingersSet; 
+  unordered_map<unsigned int, set<unsigned int> > fixFingersSet; 
   unordered_map<unsigned int, unsigned int> fixFingersSource;
   unsigned int source[3*m];
 
-  int replyCount; // a hack
+  unordered_map<unsigned int, int>replyCount; // a hack
 
   int fix_fingers;
 };
@@ -281,6 +282,8 @@ int main(int argc, char *argv[]){
     init(&allnodes[i]);
     map[allnodes[i].id]=i;
     allnodesIds[i] = allnodes[i].id;
+    if(biggestNode < allnodes[i].id)
+      biggestNode = allnodes[i].id;
   }
   qsort(allnodesIds, num_nodes, sizeof(unsigned int), compare);
 
@@ -288,6 +291,7 @@ int main(int argc, char *argv[]){
     state_init_oracle(&allnodes[i]);
     assert(allnodes[i].alive==true);
   }
+
   performDHTLevelAttack();
   exit(0);
 
@@ -634,7 +638,11 @@ int main(int argc, char *argv[]){
  */
 void init(struct node *n){
   Clock=0;
-  n->replyCount = 0;
+
+  for(int i=0;i<3*m;i++){
+    n->replyCount[i] = 0;
+  }
+
   n->fix_fingers = 1;
   for(int i=0;i<7;i++){
     prob_unreliability[i]=0;
@@ -884,9 +892,12 @@ void fix_fingers(Event evt, struct node *n){	// periodically refresh fingers
 
   message.value=n->fingerid[n->next];
   message.lookupId = n->next;
-
   message.to = me;
-
+  if(n->id == allnodes[0].id)
+    {
+      /* cout<<"      "<<message.lookupId<<endl;     */
+      /* printFingerTable(allnodes[0].id); */
+    }
   // send lookup msg to Rl nodes.
   message.ttl=0;
   message.path.push(me);	// always set ttl before issuing a lookup and add initiator to the path!
@@ -1644,7 +1655,6 @@ void secureLookup(Event evt, struct node *n)
   	  randomNodes.insert(nodeId);
   	}
     }
-
   set<unsigned int>::iterator it;
   struct msg message=evt.get_message();
 
@@ -1670,7 +1680,7 @@ void secureLookupRequest(Event evt, struct node *n)
   message.source = n->id;
   // I am an honest node
   message.path.push(me);
-	
+
   // if looking for myself, i can just set up a lookup reply with my data.
   if(message.value==me){
     message.to=message.origin;
@@ -1680,6 +1690,7 @@ void secureLookupRequest(Event evt, struct node *n)
     message.value4=n->fingertable[1];
     Event evt2(Event::secure_lookupReply,Clock+1,message.to,message);
     FutureEventList.push(evt2);
+
     return;
   }
 
@@ -1687,7 +1698,7 @@ void secureLookupRequest(Event evt, struct node *n)
   if(n->iAmMalicious /*&& ENABLE_DHT_LEVEL_ATTACK && fixingFingersMode*/)
     {
       unsigned int maliciousNodeId = findClosestMaliciousNodeInLookup(message.value, me);
-           /* cout<<"looking for "<<message.value<<" returning "<<maliciousNodeId<<" i am "<<me<<endl; */
+      /* cout<<"looking for "<<message.value<<" returning "<<maliciousNodeId<<" i am "<<me<<endl; */
       message.to=message.origin;
       message.from=me;
       node* maliciousNode = &allnodes[map[maliciousNodeId]];
@@ -1697,6 +1708,14 @@ void secureLookupRequest(Event evt, struct node *n)
       message.value4=maliciousNode->fingertable[2];
       Event evt2(Event::secure_lookupReply,Clock+1,message.to,message);
       FutureEventList.push(evt2);
+
+    /* if(message.value2 < message.value && message.value < biggestNode) */
+    /*   { */
+    /* 	cout<<message.value2<<"  "<<message.value<<endl; */
+    /* 	cout<<biggestNode<<"  "<<endl; */
+    /* 	exit(0); */
+    /*   } */
+
       return;
     } /*else if (n->iAmMalicious && !fixingFingersMode) // application level attack 
     {
@@ -1754,13 +1773,14 @@ void secureLookupRequest(Event evt, struct node *n)
     FutureEventList.push(evt2);	
   }
   else{	// all preceeding nodes have failed...pick the first alive succ in the succ list and thats the result
-    //cout << me << " " << message.value << endl;
-    //cout << n->fingertable[0] << " " << n->fingertable[1] << " " << succ_alive(message.value) ;
-    //exit(1);
+    cout << me << " " << message.value << endl;
+    cout << n->fingertable[0] << " " << n->fingertable[1] << " " << succ_alive(message.value) ;
+    exit(1);
     // if none exists then lookup has failed
   }
   // check the closest fingertable entry to id
   // schedule lookup message
+
 }
 
 /**
@@ -1771,13 +1791,13 @@ void secureLookupReply(Event evt, struct node *n)
   // add to the lookup request
   msg message=evt.get_message();
 
-  (n->fixFingersSet).insert(message.value2);
+  (n->fixFingersSet[message.lookupId]).insert(message.value2);
   n->fixFingersSource[message.value2] = message.from;
 
-  n->replyCount++;
+  n->replyCount[message.lookupId]++;
 
   // Should be timer her. But since no nodes die, I just look to make sure all the replies are received.
-  if((unsigned int)n->replyCount==(unsigned int)rLookup)
+  if((unsigned int)n->replyCount[message.lookupId]==(unsigned int)rLookup)
     {
       secureLookupFixFinger(n, message.lookupId);
       assert(n->fingerid[message.lookupId] == message.value);
@@ -1791,20 +1811,48 @@ void secureLookupFixFinger(struct node *n, int lookupId)
   // pick the best one in the set
   set<unsigned int>::iterator it;
 
-  unsigned int bestFinger = *(n->fixFingersSet.begin());
+  unsigned int bestFinger = *(n->fixFingersSet[lookupId].begin());
+  int newFinger = 0;
+  unsigned int bestFingerSource = n->fixFingersSource[bestFinger];
 
-  for ( it = n->fixFingersSet.begin() ; it != n->fixFingersSet.end(); it++ )
+  for ( it = n->fixFingersSet[lookupId].begin() ; it != n->fixFingersSet[lookupId].end(); it++ )
     {
-
-      if( simCanon_NodeId_Closer(*it, n->fingertable[lookupId], value)==*it /* (bestFinger - value >= *it - value) */ )
+      if( simCanon_NodeId_Closer(*it, bestFinger, value)==*it && *it!=n->id)
 	{
-	  n->fingertable[lookupId]=*it;
-	  n->source[lookupId]=n->fixFingersSource[*it];
-	  bestFinger = *it;
+	  if( (*it < value && value > biggestNode) || (*it > value && value < biggestNode) )
+	    {
+	      newFinger = 1;
+	      bestFinger = *it;
+	      bestFingerSource = n->fixFingersSource[*it];
+
+	      /* if(bestFinger <= value && value<biggestNode ) */
+	      /* 	{ */
+	      /* 	  cout<<"  id="<<n->id<<"  l="<<lookupId<<"  v="<<value<<"  b="<<bestFinger<<endl; */
+	      /* 	  cout<<"  biggest node="<<biggestNode<<"  mod="<<value%MAXID<<endl; */
+	      /* 	  printNodes(); */
+	      /* 	  exit(0); */
+	      /* 	} */
+	    }
 	}
     }
-  n->replyCount = 0;
-  n->fixFingersSet.clear();
+
+  if(newFinger == 1)
+    {
+      n->fingertable[lookupId] = bestFinger;
+      n->source[lookupId] = bestFingerSource;
+    }
+  else
+    {
+      /* cout<<"  id="<<n->id<<"  v="<<value<<"  f="<<n->fingertable[lookupId]<<"   b="<<biggestNode<<"  l="<<lookupId<<endl; */
+      /* for ( it = n->fixFingersSet[lookupId].begin() ; it != n->fixFingersSet[lookupId].end(); it++ ) */
+      /* 	cout<<"  "<<*it<<"  "<<n->fixFingersSource[*it]<<endl; */
+      /* cout<<"\nexiting\n"; */
+      /* exit(0); */
+    }
+
+
+  n->replyCount[lookupId] = 0;
+  n->fixFingersSet[lookupId].clear();
 }
 
 
@@ -1815,7 +1863,7 @@ void secureLookupFixFinger(struct node *n, int lookupId)
  */
 unsigned int findClosestMaliciousNodeInLookup(unsigned int lookupId, unsigned int me)
 {
-  int tempId = lookupId-1;
+  int tempId = lookupId;
   int id;
   do{
     id = succ(tempId);
@@ -1928,10 +1976,10 @@ void runFixFingersSimulationPart()
 
     Clock=evt.get_time();
 
-    if(tempClock<Clock && (int)Clock%2 == 0)
+    if(tempClock<Clock && (int)Clock%5 == 0)
       {
 	tempClock = Clock;
-	/* printFingerTable(); */
+	printFingerTable();
 	findNumberOfMaliciousNodesInFingerTables();
       }
 
@@ -1988,12 +2036,13 @@ void findNumberOfMaliciousNodesInFingerTables()
   int countNonMaliciousSucc = 0;
   int countMaliciousSucc = 0;
   int countNoSource = 0;
+  int countNoSourceNotMalicious = 0;
 
   for(int i=0; i<num_nodes; i++)
     {
       for(int j=2*m; j<3*m; j++)
 	{
-	  if ( allnodes[map[allnodes[i].fingertable[j]]].iAmMalicious )
+	  if ( allnodes[map[allnodes[i].fingertable[j]]].iAmMalicious && allnodes[map[allnodes[i].fingertable[j]]].source[j] != 0 )
 	    count++;
 	  else if ( allnodes[map[allnodes[i].fingertable[j]]].source[j] == allnodes[i].id )
 	    countNonMaliciousSucc++;
@@ -2005,11 +2054,19 @@ void findNumberOfMaliciousNodesInFingerTables()
 	  if (allnodes[i].source[j] == 0)
 	    countNoSource++;
 
+	  if (allnodes[map[allnodes[i].fingertable[j]]].source[j] == 0 && !allnodes[map[allnodes[i].fingertable[j]]].iAmMalicious)
+	    {
+	      /* cout<<"**"<<allnodes[i].id<<"  "<<j<<endl; */
+	      /* printFingerTable(allnodes[i].id); */
+	      countNoSourceNotMalicious++;
+	    }
+
 	}
       
     }
-  /* cout<<count<<"/"<<(num_nodes*m)<<"   "<<(double)(100*count)/(num_nodes*m)<<"%"<<"  NMsucc="<<countNonMaliciousSucc<<"  MaliciousSucc="<<countMaliciousSucc<<"  NoSourceYet= "<<countNoSource; */
-  cout<<(double)(100*count)/(num_nodes*m);
+
+  cout<<count<<"/"<<(num_nodes*m)<<"   "<<(double)(100*count)/(num_nodes*m)<<"%"<<"  NMsucc="<<countNonMaliciousSucc<<"  MaliciousSucc="<<countMaliciousSucc<<"  NoSourceYet= "<<countNoSource<<"  NoSourceNotMalicious= "<<countNoSourceNotMalicious;
+  /* cout<<(double)(100*count)/(num_nodes*m); */
 
   if(count == num_nodes*m)
     exit(0);
