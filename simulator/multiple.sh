@@ -11,7 +11,7 @@ rLookup=10
 enable_dht_attack=1
 single_succ=0
 
-for x in 1 2 3 4 5
+for x in 2 3 4 5
 do
 	for y in 1 5 10 15 20
 	do

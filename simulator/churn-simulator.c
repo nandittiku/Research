@@ -253,7 +253,7 @@ int max(int a,int b, int c){
 int main(int argc, char *argv[]){
 
   // note that m should be close to log n, since the size of succ list should be 2*log n
-  assert(pow(2,m)==MAXID);
+  /* assert(pow(2,m)==MAXID); */
   if(argc!=13){
     cout << "Usage: ./a.out num_nodes check_predecessor_timer stabilize_timer fix_fingers_timer sign_timer path_timer mean_alive simulation_time random_seed rLookup SINGLE_SUCCESSOR_IN_LIST ENABLE_DHT_LEVEL_ATTACK" << endl;
     exit(1);
@@ -1796,6 +1796,17 @@ void secureLookupReply(Event evt, struct node *n)
 
   n->replyCount[message.lookupId]++;
 
+  /* if(n->id==allnodes[0].id && message.lookupId==40) */
+  /*   { */
+  /*     cout<<n->replyCount[message.lookupId]<<"   from="<<message.from; */
+  /*     if(allnodes[map[message.from]].iAmMalicious) */
+  /* 	cout<<" M"; */
+  /*     cout<<" value="<<message.value<<"  value2="<<message.value2; */
+  /*     if(allnodes[map[message.value2]].iAmMalicious) */
+  /* 	cout<<" M"; */
+  /*     cout<<endl; */
+  /*   } */
+
   // Should be timer her. But since no nodes die, I just look to make sure all the replies are received.
   if((unsigned int)n->replyCount[message.lookupId]==(unsigned int)rLookup)
     {
@@ -1812,44 +1823,40 @@ void secureLookupFixFinger(struct node *n, int lookupId)
   set<unsigned int>::iterator it;
 
   unsigned int bestFinger = *(n->fixFingersSet[lookupId].begin());
-  int newFinger = 0;
   unsigned int bestFingerSource = n->fixFingersSource[bestFinger];
+
+  /* if(n->id==allnodes[0].id) */
+  /* cout<<"\n\n\n Fixing finger for "<<n->id<<"   lookupId="<<lookupId<<"   value="<<value<<"  should be equal to="<<(pow(2,lookupId-(2*m))+n->id)<<endl<<endl; */
 
   for ( it = n->fixFingersSet[lookupId].begin() ; it != n->fixFingersSet[lookupId].end(); it++ )
     {
-      if( simCanon_NodeId_Closer(*it, bestFinger, value)==*it && *it!=n->id)
+      /* if(n->id==allnodes[0].id) */
+      /* 	{ */
+      /* 	  cout<<*it; */
+      /* 	  if(allnodes[map[*it]].iAmMalicious) */
+      /* 	    cout<<" M"; */
+      /* 	  cout<<endl; */
+      /* 	} */
+      if( ( abs((int)(bestFinger-value)) > abs((int)(*it-value))) )
 	{
 	  if( (*it < value && value > biggestNode) || (*it > value && value < biggestNode) )
 	    {
-	      newFinger = 1;
 	      bestFinger = *it;
 	      bestFingerSource = n->fixFingersSource[*it];
-
-	      /* if(bestFinger <= value && value<biggestNode ) */
-	      /* 	{ */
-	      /* 	  cout<<"  id="<<n->id<<"  l="<<lookupId<<"  v="<<value<<"  b="<<bestFinger<<endl; */
-	      /* 	  cout<<"  biggest node="<<biggestNode<<"  mod="<<value%MAXID<<endl; */
-	      /* 	  printNodes(); */
-	      /* 	  exit(0); */
-	      /* 	} */
 	    }
 	}
     }
 
-  if(newFinger == 1)
-    {
-      n->fingertable[lookupId] = bestFinger;
-      n->source[lookupId] = bestFingerSource;
-    }
-  else
-    {
-      /* cout<<"  id="<<n->id<<"  v="<<value<<"  f="<<n->fingertable[lookupId]<<"   b="<<biggestNode<<"  l="<<lookupId<<endl; */
-      /* for ( it = n->fixFingersSet[lookupId].begin() ; it != n->fixFingersSet[lookupId].end(); it++ ) */
-      /* 	cout<<"  "<<*it<<"  "<<n->fixFingersSource[*it]<<endl; */
-      /* cout<<"\nexiting\n"; */
-      /* exit(0); */
-    }
+  n->fingertable[lookupId] = bestFinger;
+  n->source[lookupId] = bestFingerSource;
 
+  /* if(n->id==allnodes[0].id) */
+  /*   { */
+  /*     cout<<endl<<"best = "<<bestFinger<<endl; */
+  /*     printFingerTable(allnodes[0].id); */
+  /*     findNumberOfMaliciousNodesInFingerTables(); */
+  /*     exit(0); */
+  /*   } */
 
   n->replyCount[lookupId] = 0;
   n->fixFingersSet[lookupId].clear();
@@ -1979,7 +1986,7 @@ void runFixFingersSimulationPart()
     if(tempClock<Clock && (int)Clock%5 == 0)
       {
 	tempClock = Clock;
-	printFingerTable();
+	/* printFingerTable(); */
 	findNumberOfMaliciousNodesInFingerTables();
       }
 
@@ -2065,8 +2072,8 @@ void findNumberOfMaliciousNodesInFingerTables()
       
     }
 
-  cout<<count<<"/"<<(num_nodes*m)<<"   "<<(double)(100*count)/(num_nodes*m)<<"%"<<"  NMsucc="<<countNonMaliciousSucc<<"  MaliciousSucc="<<countMaliciousSucc<<"  NoSourceYet= "<<countNoSource<<"  NoSourceNotMalicious= "<<countNoSourceNotMalicious;
-  /* cout<<(double)(100*count)/(num_nodes*m); */
+  /* cout<<count<<"/"<<(num_nodes*m)<<"   "<<(double)(100*count)/(num_nodes*m)<<"%"<<"  NMsucc="<<countNonMaliciousSucc<<"  MaliciousSucc="<<countMaliciousSucc<<"  NoSourceYet= "<<countNoSource<<"  NoSourceNotMalicious= "<<countNoSourceNotMalicious; */
+  cout<<(double)(100*count)/(num_nodes*m);
 
   if(count == num_nodes*m)
     exit(0);
