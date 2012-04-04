@@ -1837,7 +1837,8 @@ void secureLookupFixFinger(struct node *n, int lookupId)
       /* 	    cout<<" M"; */
       /* 	  cout<<endl; */
       /* 	} */
-      if( ( abs((int)(bestFinger-value)) > abs((int)(*it-value))) )
+
+      if( ( abs((int)(bestFinger-value)) > abs((int)(*it-value))) && (*it >= n->fingerid[lookupId] || (unsigned int)n->fingerid[lookupId] > (unsigned int)MAXID ) )
 	{
 	  if( (*it < value && value > biggestNode) || (*it > value && value < biggestNode) )
 	    {

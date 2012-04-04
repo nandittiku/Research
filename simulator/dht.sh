@@ -8,7 +8,7 @@ path_timer=10
 let mean_alive=3600
 simulation_time=1000
 random_seed=$RANDOM
-rLookup=3
+rLookup=10
 ENABLE_DHT_ATTACK=1
 SINGLE_SUCC=0
 
