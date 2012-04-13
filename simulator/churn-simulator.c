@@ -236,6 +236,11 @@ void printNodes();
 void performMaliciousLookups();
 void printFingerTable(unsigned int nodeId);
 
+// NISAN
+void performNISAN();
+void runNISANSimulation();
+void secureLookup_NISAN(Event evt, struct node* n);
+
 double prob_unreliability[7];
 double path_count=0;
 
@@ -292,8 +297,12 @@ int main(int argc, char *argv[]){
     assert(allnodes[i].alive==true);
   }
 
-  performDHTLevelAttack();
+
+  performNISAN();
   exit(0);
+
+  /* performDHTLevelAttack(); */
+  /* exit(0); */
 
   /* // Perform the actions in the events queue */
   /* while(!FutureEventList.empty() && Clock < simulation_time ){ */
@@ -1739,19 +1748,21 @@ void secureLookupRequest(Event evt, struct node *n)
   }
 
   unsigned int next_hop=me;
-
+  int succ_list = 0;
   // Check if the nodeID is in my successor list or my fingertable
   if (SINGLE_SUCCESSOR_IN_LIST)
     {
       if(simCanon_NodeId_Closer(next_hop,n->fingertable[0],message.value)==n->fingertable[0] &&
 	 message.failed_nodes.find(n->fingertable[0])==message.failed_nodes.end()){
 	next_hop=n->fingertable[0];
+	succ_list = 1;
       }
       // use finger table
       for(int i=2*m;i<3*m;i++){	// avoid failed nodes
 	if(simCanon_NodeId_Closer(next_hop,n->fingertable[i],message.value)==n->fingertable[i] &&
 	   message.failed_nodes.find(n->fingertable[i])==message.failed_nodes.end()){
 	  next_hop=n->fingertable[i];
+	  succ_list = 0;
 	}
       }
     }
@@ -1762,8 +1773,27 @@ void secureLookupRequest(Event evt, struct node *n)
 	if(simCanon_NodeId_Closer(next_hop,n->fingertable[i],message.value)==n->fingertable[i] &&
 	   message.failed_nodes.find(n->fingertable[i])==message.failed_nodes.end()){
 	  next_hop=n->fingertable[i];
+
+	  if(i<2*m)
+	    succ_list = 1;
+	  else
+	    succ_list = 0;
+
 	}
       }
+    }
+
+  if(succ_list == 1)
+    {
+      message.to=message.origin;
+      message.from=me;
+      message.value2=next_hop;
+      message.value3=n->fingertable[1];
+      message.value4=n->fingertable[2];
+    
+      Event evt2(Event::secure_lookupReply,Clock+1,message.to,message);
+      FutureEventList.push(evt2);
+      return;
     }
 
   // could not find it in my fingertable, so lets propogate the lookup to the next hop in my Chord lookup protocol
@@ -1889,7 +1919,7 @@ unsigned int findClosestMaliciousNodeInLookup(unsigned int lookupId, unsigned in
 
 void performDHTLevelAttack()
 {
-  int f = 20;
+  int f = 1;
 
   // make all nodes non-malicious
   for(int i=0; i<num_nodes; i++)
@@ -2050,7 +2080,7 @@ void findNumberOfMaliciousNodesInFingerTables()
     {
       for(int j=2*m; j<3*m; j++)
 	{
-	  if ( allnodes[map[allnodes[i].fingertable[j]]].iAmMalicious && allnodes[map[allnodes[i].fingertable[j]]].source[j] != 0 )
+	  if ( allnodes[map[allnodes[i].fingertable[j]]].iAmMalicious /* && allnodes[map[allnodes[i].fingertable[j]]].source[j] != 0  */)
 	    count++;
 	  else if ( allnodes[map[allnodes[i].fingertable[j]]].source[j] == allnodes[i].id )
 	    countNonMaliciousSucc++;
@@ -2138,6 +2168,109 @@ void checkFingers()
 	  cout<<endl;
 	}
       break;
+    }
+
+}
+
+
+/*****************
+ *     NISAN     *
+ *****************/
+
+void performNISAN()
+{
+  int f = 20;
+
+  // make all nodes non-malicious
+  for(int i=0; i<num_nodes; i++)
+    {
+      allnodes[i].iAmMalicious = 0;
+      allnodes[i].alreadyLookedUpList.clear();
+    }
+  // make %f nodes malicious
+  int num_malicious_nodes = (f*num_nodes)/100;
+  int count_malicious_nodes = 0;
+  int random;
+
+  while(count_malicious_nodes < num_malicious_nodes)
+    {
+      random=rand()%num_nodes;
+      if(allnodes[random].iAmMalicious != 1)
+	{
+	  allnodes[random].iAmMalicious = 1;
+	  count_malicious_nodes++;
+	  maliciousNodeList.insert(allnodes[random].id);
+	}
+    }
+
+  Clock = 0;
+  for(int i=0; i<num_nodes; i++)
+    {
+      struct msg message;
+      message.from = allnodes[i].id;
+      message.to = message.from;
+      Event evt(Event::fix_fingers,Clock,message.to,message);
+      FutureEventList.push(evt);
+    }
+
+  runNISANSimulation();  
+}
+
+void runNISANSimulation()
+{
+  findNumberOfMaliciousNodesInFingerTables();
+  int tempClock = Clock;
+  /* printFingerTable(); */
+
+  while( 1 /* Clock <= 200*60 */){
+
+    Event evt=FutureEventList.top();
+    FutureEventList.pop();
+
+    Clock=evt.get_time();
+
+    if(tempClock<Clock && (int)Clock%5 == 0)
+      {
+	tempClock = Clock;
+	/* printFingerTable(); */
+	findNumberOfMaliciousNodesInFingerTables();
+      }
+
+    struct node *n;
+    n=&allnodes[map[evt.get_id()]];
+    assert(evt.get_id()==n->id);
+    if(evt.get_type()==Event::secure_lookup){
+      secureLookup_NISAN(evt,n);
+    }
+    else if(evt.get_type()==Event::fix_fingers){
+      fix_fingers(evt,n);
+    } 
+  }
+
+}
+
+void secureLookup_NISAN(Event evt, struct node* n)
+{
+  set<unsigned int> randomNodes;
+  while( randomNodes.size() < (unsigned int)rLookup )
+    {
+      int nodeId = (2*m) + rand()%m;
+      if(randomNodes.find(nodeId) == randomNodes.end())
+  	{
+  	  randomNodes.insert(nodeId);
+  	}
+    }
+  set<unsigned int>::iterator it;
+  struct msg message=evt.get_message();
+
+  assert(message.from == n->id);
+  message.origin = n->id;
+
+  for ( it = randomNodes.begin() ; it != randomNodes.end(); it++ )
+    {
+      message.to = n->fingertable[*it];
+      Event evt2( Event::secure_lookupRequest,Clock+1,message.to,message);
+      FutureEventList.push(evt2);
     }
 
 }
