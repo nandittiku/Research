@@ -2262,8 +2262,6 @@ void secureLookup_NISAN(Event evt, struct node* n)
   set<unsigned int> newSet;
   set<unsigned int>::iterator iter;
   unordered_map<unsigned int, unsigned int> fingerSource;
-  int steps = 0;
-  int maxSteps = 5;
 
   /* cout<<"info "<<n->id<<"  "<<message.value<<endl<<endl; */
   // init aggregatedGreedySearch
@@ -2276,9 +2274,6 @@ void secureLookup_NISAN(Event evt, struct node* n)
 
   do
     {
-      if(++steps > maxSteps)
-	break;
-
       // make of copy of the set
       copyAggregatedGreedySearch.clear();
       for(iter = aggregatedGreedySearch.begin(); iter!=aggregatedGreedySearch.end(); iter++)
@@ -2313,7 +2308,6 @@ void secureLookup_NISAN(Event evt, struct node* n)
 	      iter++;
 	    }
 
-	  assert(closest>1);
 	  newSet.insert(closest);
 	  aggregatedGreedySearch.erase(closest);
 	  iter = aggregatedGreedySearch.begin();
@@ -2346,11 +2340,12 @@ void secureLookup_NISAN(Event evt, struct node* n)
 	      fingerSource[m2.fingertable[i]] = *iter;
 	      assert( fingerSource[m2.fingertable[i]] > 1 );
 	    }
+	  aggregatedGreedySearch.insert(*iter);
 	}
 
       newSet.clear();
       /* cout<<"3\n"; */
-      // find rLookup closest nodes to message.value
+      // find rLookup closest nodes to message.value -- same code as the one above
       iter = aggregatedGreedySearch.begin();
       iter++;
       for(; ;)
@@ -2369,7 +2364,6 @@ void secureLookup_NISAN(Event evt, struct node* n)
 	    }
 
 	  newSet.insert(closest);
-	  assert(closest>1);
 	  aggregatedGreedySearch.erase(closest);
 	  iter = aggregatedGreedySearch.begin();
 	  if(aggregatedGreedySearch.size() == 0)
@@ -2378,15 +2372,14 @@ void secureLookup_NISAN(Event evt, struct node* n)
 	  iter++;
 	}
 
-      // copy newSet into aggregatedGreedySearch
+      // copy newSet into aggregatedGreedySearch to be able to repeat process
       aggregatedGreedySearch.clear();
       for(iter = newSet.begin(); iter!=newSet.end(); iter++)
 	{
 	  aggregatedGreedySearch.insert(*iter);
-	  assert(*iter>1);
 	}
       /* cout<<"h\n"; */
-    }while(newSet != copyAggregatedGreedySearch);
+    }while(newSet != copyAggregatedGreedySearch); // check if there are any changes in this iteration
 
   /* cout<<"final set "<<endl; */
   /* for(iter = newSet.begin(); iter!=newSet.end(); iter++) */
