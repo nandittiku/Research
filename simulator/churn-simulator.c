@@ -240,6 +240,7 @@ void printFingerTable(unsigned int nodeId);
 void performNISAN();
 void runNISANSimulation();
 void secureLookup_NISAN(Event evt, struct node* n);
+msg secureLookupRequest_NISAN(Event evt);
 
 double prob_unreliability[7];
 double path_count=0;
@@ -2103,8 +2104,8 @@ void findNumberOfMaliciousNodesInFingerTables()
       
     }
 
-  /* cout<<count<<"/"<<(num_nodes*m)<<"   "<<(double)(100*count)/(num_nodes*m)<<"%"<<"  NMsucc="<<countNonMaliciousSucc<<"  MaliciousSucc="<<countMaliciousSucc<<"  NoSourceYet= "<<countNoSource<<"  NoSourceNotMalicious= "<<countNoSourceNotMalicious; */
-  cout<<(double)(100*count)/(num_nodes*m);
+  cout<<count<<"/"<<(num_nodes*m)<<"   "<<(double)(100*count)/(num_nodes*m)<<"%"<<"  NMsucc="<<countNonMaliciousSucc<<"  MaliciousSucc="<<countMaliciousSucc<<"  NoSourceYet= "<<countNoSource<<"  NoSourceNotMalicious= "<<countNoSourceNotMalicious;
+  /* cout<<(double)(100*count)/(num_nodes*m); */
 
   if(count == num_nodes*m)
     exit(0);
@@ -2112,7 +2113,7 @@ void findNumberOfMaliciousNodesInFingerTables()
    if(highestMaliciousNodes < count)
      {
        highestMaliciousNodes = count;
-       /* cout<<" *"; */
+       cout<<" *";
      }
    cout<<endl;
 }
@@ -2220,7 +2221,7 @@ void runNISANSimulation()
 {
   findNumberOfMaliciousNodesInFingerTables();
   int tempClock = Clock;
-  /* printFingerTable(); */
+  printFingerTable();
 
   while( 1 /* Clock <= 200*60 */){
 
@@ -2229,10 +2230,10 @@ void runNISANSimulation()
 
     Clock=evt.get_time();
 
-    if(tempClock<Clock && (int)Clock%5 == 0)
+    if(tempClock<Clock && (int)Clock%2 == 0)
       {
 	tempClock = Clock;
-	/* printFingerTable(); */
+	printFingerTable();
 	findNumberOfMaliciousNodesInFingerTables();
       }
 
@@ -2251,26 +2252,197 @@ void runNISANSimulation()
 
 void secureLookup_NISAN(Event evt, struct node* n)
 {
-  set<unsigned int> randomNodes;
-  while( randomNodes.size() < (unsigned int)rLookup )
-    {
-      int nodeId = (2*m) + rand()%m;
-      if(randomNodes.find(nodeId) == randomNodes.end())
-  	{
-  	  randomNodes.insert(nodeId);
-  	}
-    }
-  set<unsigned int>::iterator it;
   struct msg message=evt.get_message();
 
   assert(message.from == n->id);
   message.origin = n->id;
 
-  for ( it = randomNodes.begin() ; it != randomNodes.end(); it++ )
+  set<unsigned int> aggregatedGreedySearch;
+  set<unsigned int> copyAggregatedGreedySearch;
+  set<unsigned int> newSet;
+  set<unsigned int>::iterator iter;
+  unordered_map<unsigned int, unsigned int> fingerSource;
+  int steps = 0;
+  int maxSteps = 5;
+
+  /* cout<<"info "<<n->id<<"  "<<message.value<<endl<<endl; */
+  // init aggregatedGreedySearch
+  for (int i = 0; i < 3*m; ++i)
     {
-      message.to = n->fingertable[*it];
-      Event evt2( Event::secure_lookupRequest,Clock+1,message.to,message);
-      FutureEventList.push(evt2);
+      aggregatedGreedySearch.insert(n->fingertable[i]);
+      fingerSource[n->fingertable[i]] = n->id;
+      assert( fingerSource[n->fingertable[i]] > 1 );
     }
 
+  do
+    {
+      if(++steps > maxSteps)
+	break;
+
+      // make of copy of the set
+      copyAggregatedGreedySearch.clear();
+      for(iter = aggregatedGreedySearch.begin(); iter!=aggregatedGreedySearch.end(); iter++)
+	{
+	  copyAggregatedGreedySearch.insert(*iter);
+	  assert(*iter>1);
+	}
+
+      /* for(iter = aggregatedGreedySearch.begin(); iter!=aggregatedGreedySearch.end(); iter++) */
+      /* 	{ */
+      /* 	  cout<<*iter<<"  "; */
+      /* 	} */
+      /* cout<<endl; */
+      /* cout<<"1\n"; */
+
+      // find rLookup closest nodes to message.value
+      newSet.clear();
+      iter = aggregatedGreedySearch.begin();
+      unsigned int closest = *iter;
+      iter++;
+      for(;;)
+	{
+	  if((unsigned int)newSet.size()==(unsigned int)rLookup)
+	    break;
+
+	  while( iter != aggregatedGreedySearch.end() ) 
+	    {
+	      if ( abs((int)(closest-message.value)) > abs((int)(*iter-message.value)) && (*iter>message.value || message.value>biggestNode) )
+		{
+		  closest = *iter;
+		}
+	      iter++;
+	    }
+
+	  assert(closest>1);
+	  newSet.insert(closest);
+	  aggregatedGreedySearch.erase(closest);
+	  iter = aggregatedGreedySearch.begin();
+	  if(aggregatedGreedySearch.size() == 0)
+	    break;
+	  closest = *iter;
+	  iter++;
+	}
+
+      /* cout<<"set\n"; */
+      /* for(iter = newSet.begin(); iter!=newSet.end(); iter++) */
+      /* 	{ */
+      /* 	  cout<<*iter<<endl; */
+      /* 	} */
+      /* cout<<endl; */
+      /* exit(0); */
+
+      /* cout<<"2\n"; */
+      aggregatedGreedySearch.clear();
+
+      // make lookup requests from the set
+      for ( iter = newSet.begin() ; iter != newSet.end(); iter++ )
+	{
+	  message.to = *iter;
+	  Event evt2( Event::secure_lookupRequest,Clock+1,message.to,message);
+	  msg m2 = secureLookupRequest_NISAN(evt2);
+	  for (int i = 0; i < 3*m; ++i)
+	    {
+	      aggregatedGreedySearch.insert(m2.fingertable[i]);
+	      fingerSource[m2.fingertable[i]] = *iter;
+	      assert( fingerSource[m2.fingertable[i]] > 1 );
+	    }
+	}
+
+      newSet.clear();
+      /* cout<<"3\n"; */
+      // find rLookup closest nodes to message.value
+      iter = aggregatedGreedySearch.begin();
+      iter++;
+      for(; ;)
+	{
+	  unsigned int closest = *iter;
+	  if((unsigned int)newSet.size()==(unsigned int)rLookup)
+	    break;
+
+	  while( iter != aggregatedGreedySearch.end() ) 
+	    {
+	      if ( abs((int)(closest-message.value)) > abs((int)(*iter-message.value)) && (*iter>message.value || message.value>biggestNode) )
+		{
+		  closest = *iter;
+		}
+	      iter++;
+	    }
+
+	  newSet.insert(closest);
+	  assert(closest>1);
+	  aggregatedGreedySearch.erase(closest);
+	  iter = aggregatedGreedySearch.begin();
+	  if(aggregatedGreedySearch.size() == 0)
+	    break;
+	  closest = *iter;
+	  iter++;
+	}
+
+      // copy newSet into aggregatedGreedySearch
+      aggregatedGreedySearch.clear();
+      for(iter = newSet.begin(); iter!=newSet.end(); iter++)
+	{
+	  aggregatedGreedySearch.insert(*iter);
+	  assert(*iter>1);
+	}
+      /* cout<<"h\n"; */
+    }while(newSet != copyAggregatedGreedySearch);
+
+  /* cout<<"final set "<<endl; */
+  /* for(iter = newSet.begin(); iter!=newSet.end(); iter++) */
+  /*   { */
+  /*     cout<<*iter<<endl; */
+  /*   } */
+
+  iter = newSet.begin();
+  unsigned int closest = *(newSet.begin());
+ 
+  while(iter != newSet.end()) 
+    {
+      if ( abs((int)(closest-message.value)) > abs((int)(*iter-message.value)) && (*iter>message.value || message.value>biggestNode) )
+	{
+	  closest = *iter;
+	}
+      iter++;
+    }
+  /* cout<<"closest "<<closest<<endl; */
+  /* cout<<endl<<endl; */
+  /* cout<<message.value<<"  "<<closest<<endl; */
+  /* cout<<endl<<endl; */
+  /* printNodes(); */
+  /* cout<<endl; */
+  /* exit(0); */
+
+
+  // set the finger
+  n->fingertable[message.lookupId] = closest;
+  n->source[message.lookupId] = fingerSource[closest];
+  /* cout<<"**"<<fingerSource[closest]<<"  "<<closest<<endl; */
+
+}
+
+msg secureLookupRequest_NISAN(Event evt)
+{
+  msg message=evt.get_message();
+  // get the node
+  struct node* n = &allnodes[map[message.to]];
+  
+  if(n->iAmMalicious)
+    {
+      for (int i = 0; i < 3*m; ++i)
+	{
+	  message.fingertable[i] = findClosestMaliciousNodeInLookup(n->fingertable[i], n->id);
+	}     
+      /* cout<<"mpopo\n"; */
+      /* exit(0); */
+    }
+  else
+    {
+      for (int i = 0; i < 3*m; ++i)
+	{
+	  message.fingertable[i] = n->fingertable[i];
+	}
+    }
+
+  return message;
 }
