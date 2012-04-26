@@ -1,5 +1,5 @@
 #!/bin/bash
-num_nodes=10000
+num_nodes=1000
 check_predecessor_timer=10
 let stabilize_timer=2
 fix_fingers_timer=3
@@ -7,7 +7,7 @@ sign_timer=2
 path_timer=10
 let mean_alive=3600
 simulation_time=1000
-rLookup=1
+rLookup=10
 enable_dht_attack=1
 single_succ=1
 
