@@ -8,11 +8,12 @@ path_timer=10
 let mean_alive=3600
 simulation_time=1000
 random_seed=$RANDOM
-rLookup=10
+rLookup=30
 ENABLE_DHT_ATTACK=1
 SINGLE_SUCC=0
+NISAN_SUCC=1
 
-echo "dht level attack test"
-echo time ./sim $num_nodes $check_predecessor_timer $stabilize_timer $fix_fingers_timer $sign_timer $path_timer $mean_alive $simulation_time $random_seed $rLookup $SINGLE_SUCC $ENABLE_DHT_ATTACK
-time ./sim $num_nodes $check_predecessor_timer $stabilize_timer $fix_fingers_timer $sign_timer $path_timer $mean_alive $simulation_time $random_seed $rLookup $SINGLE_SUCC $ENABLE_DHT_ATTACK
+#echo "dht level attack test"
+echo time ./sim $num_nodes $check_predecessor_timer $stabilize_timer $fix_fingers_timer $sign_timer $path_timer $mean_alive $simulation_time $random_seed $rLookup $SINGLE_SUCC $ENABLE_DHT_ATTACK $NISAN_SUCC
+time ./sim $num_nodes $check_predecessor_timer $stabilize_timer $fix_fingers_timer $sign_timer $path_timer $mean_alive $simulation_time $random_seed $rLookup $SINGLE_SUCC $ENABLE_DHT_ATTACK $NISAN_SUCC
 
